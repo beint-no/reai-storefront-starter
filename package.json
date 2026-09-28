@@ -1,0 +1,12 @@
+{
+  "name": "reai-storefront-starter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "check": "node --check src/worker.js && node --test"
+  },
+  "devDependencies": {
+    "wrangler": "4.142.0"
+  }
+}
