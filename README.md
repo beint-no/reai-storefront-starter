@@ -4,6 +4,8 @@ A small, public starting point for a Cloudflare Worker storefront backed by the 
 
 The browser keeps only public variant IDs and quantities in its cart. The Worker creates a checkout session with its server-side Site credential, then sends the shopper to ReAI for customer details, shipping, and payment. ReAI validates current prices and stock again at checkout.
 
+Payment requires an active Adyen ecommerce store for the tenant and a configured ReAI Adyen management API key. A Site can show its catalog and open hosted checkout before those payment prerequisites are ready, but payment will remain unavailable.
+
 ## Run locally
 
 Requires Node.js 20 or newer.
