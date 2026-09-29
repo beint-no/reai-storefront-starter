@@ -2,7 +2,7 @@ const HTML_HEADERS = {
   "content-type": "text/html; charset=utf-8",
   "cache-control": "no-store",
   "x-content-type-options": "nosniff",
-  "content-security-policy": "default-src 'none'; style-src 'self'; img-src 'self' https: http: data:; base-uri 'none'; form-action 'none'",
+  "content-security-policy": "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' https: http: data:; base-uri 'none'; form-action 'self'",
 };
 
 function escapeHtml(value) {
@@ -71,10 +71,11 @@ function page(site, store, title, body, status = 200) {
   <div class="announcement">Thoughtfully selected. Made for your everyday.</div>
   <header class="site-header shell">
     <a class="wordmark" href="/">${escapeHtml(name)}<span class="wordmark-dot">.</span></a>
-    <nav aria-label="Main navigation"><a href="/#products">All products</a>${collections}</nav>
+    <nav aria-label="Main navigation"><a href="/#products">All products</a>${collections}<a href="/cart">Cart <span data-cart-count>0</span></a></nav>
   </header>
   <main id="main">${body}</main>
   <footer class="site-footer shell"><a class="wordmark" href="/">${escapeHtml(name)}<span class="wordmark-dot">.</span></a><span>Explore what matters to you.</span></footer>
+  <script src="/store.js" defer></script>
 </body>
 </html>`, { status, headers: HTML_HEADERS });
 }
@@ -114,7 +115,7 @@ function collectionPage(site, store, collection) {
 function productPage(site, store, product) {
   const options = (product.variants || []).map((variant) => {
     const label = variant.options?.map((option) => `${option.name}: ${option.value}`).join(" · ") || "Standard";
-    return `<li><span>${escapeHtml(label)}</span><strong>${escapeHtml(price(variant.price, store.currency, store.locale))}</strong></li>`;
+    return `<option value="${escapeHtml(variant.id)}">${escapeHtml(label)} · ${escapeHtml(price(variant.price, store.currency, store.locale))}</option>`;
   }).join("");
   return page(site, store, product.title, `<section class="shell inner-page">
     <a class="breadcrumb" href="/">← All products</a>
@@ -122,18 +123,73 @@ function productPage(site, store, product) {
       <div class="detail-copy"><span class="eyebrow">${escapeHtml(product.brand || site.name)}</span>
         <h1>${escapeHtml(product.title)}</h1><p class="detail-price">${escapeHtml(productPrice(product, store))}</p>
         ${product.description ? `<p class="lead">${escapeHtml(product.description)}</p>` : ""}
-        ${options ? `<h2>Options</h2><ul class="variants">${options}</ul>` : ""}
+        ${options ? `<form data-add-to-cart><label for="variant">Options</label><select id="variant" name="variantId" required>${options}</select>
+          <label for="quantity">Quantity</label><input id="quantity" name="quantity" type="number" min="1" max="20" value="1" required>
+          <button class="button" type="submit">Add to cart</button><p data-add-message role="status"></p></form>` : ""}
       </div>
     </div>
   </section>`);
 }
 
-async function siteApi(baseUrl, credential, path) {
+function cartPage(site, store) {
+  return page(site, store, "Cart", `<section class="shell inner-page"><a class="breadcrumb" href="/">← Continue shopping</a>
+    <h1>Your cart</h1><div data-cart-items><p>Loading cart…</p></div><p data-cart-total class="cart-total"></p>
+    <button class="button" type="button" data-start-checkout disabled>Continue to checkout</button>
+    <p data-checkout-error role="alert" tabindex="-1" hidden></p>
+    <p class="cart-note">ReAI confirms prices, availability, shipping and payment on the secure checkout page.</p></section>`);
+}
+
+function completePage(site, store) {
+  return page(site, store, "Order complete", `<section class="shell inner-page" data-checkout-complete>
+    <span class="eyebrow">Thank you</span><h1>Your order is complete.</h1>
+    <p class="lead">Your payment was completed in ReAI checkout. Look for your order confirmation.</p>
+    <a class="button" href="/">Continue shopping</a></section>`);
+}
+
+async function siteApi(baseUrl, credential, path, options = {}) {
   const response = await fetch(new URL(path, baseUrl), {
-    headers: { accept: "application/json", authorization: `Bearer ${credential}` },
+    ...options,
+    headers: { accept: "application/json", authorization: `Bearer ${credential}`, ...options.headers },
   });
-  if (!response.ok) throw new Error(`Site API returned ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(`Site API returned ${response.status}`);
+    error.status = response.status;
+    error.response = response;
+    throw error;
+  }
   return response.json();
+}
+
+function json(body, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" } });
+}
+
+function checkoutLines(body) {
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!body || !Array.isArray(body.lines) || body.lines.length < 1 || body.lines.length > 100) return null;
+  const lines = body.lines.map((line) => ({ variantId: line?.variantId, quantity: line?.quantity }));
+  if (lines.some((line) => typeof line.variantId !== "string" || !uuid.test(line.variantId)
+      || !Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 20)) return null;
+  return lines;
+}
+
+async function boundedJson(request) {
+  const reader = request.body?.getReader();
+  if (!reader) return null;
+  const decoder = new TextDecoder();
+  let raw = "";
+  let bytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > 16_384) {
+      await reader.cancel();
+      return null;
+    }
+    raw += decoder.decode(value, { stream: true });
+  }
+  try { return JSON.parse(raw + decoder.decode()); } catch { return null; }
 }
 
 function routeHandle(pathname, segment) {
@@ -145,8 +201,14 @@ function routeHandle(pathname, segment) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method not allowed", { status: 405 });
+    if (request.method !== "GET" && request.method !== "HEAD" && request.method !== "POST") return new Response("Method not allowed", { status: 405 });
     if (url.pathname === "/styles.css") return env.ASSETS.fetch(request);
+    if (url.pathname === "/store.js") return env.ASSETS.fetch(request);
+    if (request.method === "POST") {
+      if (url.pathname !== "/checkout/start") return json({ error: "Method not allowed" }, 405);
+      if (request.headers.get("Origin") !== url.origin) return json({ error: "Invalid origin" }, 403);
+      if (!request.headers.get("Content-Type")?.startsWith("application/json")) return json({ error: "Expected JSON" }, 415);
+    }
 
     if (!env.REAI_API_BASE_URL || !env.REAI_SITE_CREDENTIAL) {
       return page(null, null, "Coming soon", `<section class="shell inner-page"><span class="eyebrow">Coming soon</span><h1>Something good is on its way.</h1><p class="lead">This storefront is being set up.</p></section>`, 503);
@@ -159,9 +221,32 @@ export default {
       const market = site.markets?.find((entry) => entry.isDefault) || site.markets?.[0];
       if (!market) throw new Error("No Site market configured");
       const query = new URLSearchParams({ market: market.handle, locale: market.defaultLocale });
+      if (url.pathname === "/checkout/start") {
+        if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
+        const body = await boundedJson(request);
+        const lines = checkoutLines(body);
+        if (!lines) return json({ error: "Invalid cart" }, 400);
+        try {
+          const session = await siteApi(baseUrl, env.REAI_SITE_CREDENTIAL, `/site/v1/commerce/checkout-sessions?${query}`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "Idempotency-Key": request.headers.get("Idempotency-Key") || crypto.randomUUID() },
+            body: JSON.stringify({ lines, returnUrl: `${url.origin}/checkout/complete` }),
+          });
+          return json({ checkoutUrl: session.checkoutUrl });
+        } catch (error) {
+          if (error.response) {
+            const details = await error.response.json().catch(() => ({}));
+            return json({ error: details.detail || "Checkout could not be started", code: details.code, stockIssues: details.stockIssues }, error.status);
+          }
+          return json({ error: "Checkout is temporarily unavailable" }, 502);
+        }
+      }
       const store = await siteApi(baseUrl, env.REAI_SITE_CREDENTIAL, `/site/v1/commerce/storefront?${query}`);
 
+      if (url.pathname === "/catalog.json") return json({ products: store.products, currency: store.currency, locale: store.locale });
       if (url.pathname === "/") return home(site, store);
+      if (url.pathname === "/cart") return cartPage(site, store);
+      if (url.pathname === "/checkout/complete") return completePage(site, store);
       const collectionHandle = routeHandle(url.pathname, "collections");
       if (collectionHandle !== null) {
         const collection = store.collections?.find((entry) => entry.handle === collectionHandle);
@@ -174,6 +259,7 @@ export default {
       }
       return page(site, store, "Not found", `<section class="shell inner-page"><span class="eyebrow">404</span><h1>We couldn't find that page.</h1><a class="button" href="/">Back to the store</a></section>`, 404);
     } catch {
+      if (url.pathname === "/checkout/start") return json({ error: "Checkout is temporarily unavailable" }, 502);
       return page(null, null, "Temporarily unavailable", `<section class="shell inner-page"><span class="eyebrow">Please try again</span><h1>The store is temporarily unavailable.</h1><p class="lead">We couldn't load the catalog right now.</p></section>`, 502);
     }
   },

@@ -15,7 +15,7 @@ const store = {
     title: "Lamp <script>",
     description: "A useful lamp.",
     images: [{ url: "https://example.com/lamp.jpg", alt: "Desk lamp" }],
-    variants: [{ price: 25, options: [{ name: "Color", value: "Blue" }] }],
+    variants: [{ id: "00000000-0000-4000-8000-000000000001", price: 25, options: [{ name: "Color", value: "Blue" }] }],
   }],
   collections: [{ id: "c1", handle: "home", title: "Home", products: [{ id: "p1" }] }],
 };
@@ -48,4 +48,38 @@ test("shows setup page without making an upstream request when configuration is 
   const response = await worker.fetch(new Request("https://store.example/"), {});
   assert.equal(response.status, 503);
   assert.match(await response.text(), /being set up/);
+});
+
+test("creates a hosted checkout session without exposing the Site credential", async (context) => {
+  const calls = [];
+  context.mock.method(globalThis, "fetch", async (input, options) => {
+    calls.push({ url: String(input), options });
+    if (String(input).endsWith("/site/v1/site")) return Response.json(site);
+    return Response.json({ checkoutUrl: "https://app.example.test/checkout/session/test" });
+  });
+  const env = { REAI_API_BASE_URL: "https://app.example.test", REAI_SITE_CREDENTIAL: "private-token" };
+  const response = await worker.fetch(new Request("https://store.example/checkout/start", {
+    method: "POST",
+    headers: { Origin: "https://store.example", "Content-Type": "application/json" },
+    body: JSON.stringify({ lines: [{ variantId: "00000000-0000-4000-8000-000000000001", quantity: 2 }] }),
+  }), env);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { checkoutUrl: "https://app.example.test/checkout/session/test" });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].options.headers.authorization, "Bearer private-token");
+  assert.ok(calls[1].options.headers["Idempotency-Key"]);
+  assert.deepEqual(JSON.parse(calls[1].options.body), {
+    lines: [{ variantId: "00000000-0000-4000-8000-000000000001", quantity: 2 }],
+    returnUrl: "https://store.example/checkout/complete",
+  });
+});
+
+test("rejects cross-origin checkout before contacting ReAI", async (context) => {
+  context.mock.method(globalThis, "fetch", () => { throw new Error("Unexpected request"); });
+  const response = await worker.fetch(new Request("https://store.example/checkout/start", {
+    method: "POST",
+    headers: { Origin: "https://other.example", "Content-Type": "application/json" },
+    body: JSON.stringify({ lines: [{ variantId: "00000000-0000-4000-8000-000000000001", quantity: 1 }] }),
+  }), { REAI_API_BASE_URL: "https://app.example.test", REAI_SITE_CREDENTIAL: "private-token" });
+  assert.equal(response.status, 403);
 });
