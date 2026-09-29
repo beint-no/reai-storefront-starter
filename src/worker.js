@@ -1,3 +1,5 @@
+import { storeContent } from "./store-content.js";
+
 const HTML_HEADERS = {
   "content-type": "text/html; charset=utf-8",
   "cache-control": "no-store",
@@ -58,23 +60,38 @@ function page(site, store, title, body, status = 200) {
     `<a href="/collections/${encodeURIComponent(collection.handle)}">${escapeHtml(collection.title)}</a>`,
   ).join("");
   const name = site?.name || "Storefront";
+  const legalName = storeContent.legalName || name;
+  const footerCollections = (store?.collections || []).slice(0, 3).map((collection) =>
+    `<a href="/collections/${encodeURIComponent(collection.handle)}">${escapeHtml(collection.title)}</a>`,
+  ).join("");
+  const contact = storeContent.contactEmail
+    ? `<a href="mailto:${escapeHtml(storeContent.contactEmail)}">${escapeHtml(storeContent.contactEmail)}</a>`
+    : `<a href="/pages/contact">Contact us</a>`;
   return new Response(`<!doctype html>
 <html lang="${escapeHtml(store?.locale || "en")}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Explore ${escapeHtml(name)} products and collections.">
+  <meta name="theme-color" content="#21443b">
   <title>${escapeHtml(title)} · ${escapeHtml(name)}</title>
+  <link rel="icon" href="/storefront-mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <div class="announcement">Thoughtfully selected. Made for your everyday.</div>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <div class="announcement">${escapeHtml(storeContent.tagline)}</div>
   <header class="site-header shell">
-    <a class="wordmark" href="/">${escapeHtml(name)}<span class="wordmark-dot">.</span></a>
-    <nav aria-label="Main navigation"><a href="/#products">All products</a>${collections}<a href="/cart">Cart <span data-cart-count>0</span></a></nav>
+    <a class="wordmark" href="/"><img src="/storefront-mark.svg" alt="" width="38" height="38">${escapeHtml(name)}</a>
+    <nav aria-label="Main navigation"><a href="/#products">Shop</a>${collections}<a href="/pages/about">About</a><a href="/pages/contact">Contact</a><a class="cart-link" href="/cart">Cart <span data-cart-count>0</span></a></nav>
   </header>
   <main id="main">${body}</main>
-  <footer class="site-footer shell"><a class="wordmark" href="/">${escapeHtml(name)}<span class="wordmark-dot">.</span></a><span>Explore what matters to you.</span></footer>
+  <footer class="site-footer"><div class="shell footer-grid">
+    <div class="footer-brand"><a class="wordmark" href="/"><img src="/storefront-mark.svg" alt="" width="38" height="38">${escapeHtml(name)}</a><p>${escapeHtml(storeContent.aboutIntro)}</p></div>
+    <div><h2>Shop</h2><a href="/#products">All products</a>${footerCollections}<a href="/cart">Your cart</a></div>
+    <div><h2>Help</h2><a href="/pages/contact">Contact</a><a href="/pages/shipping">Shipping &amp; delivery</a><a href="/pages/faq">FAQs</a><a href="/policies/returns">Returns</a></div>
+    <div><h2>About</h2><a href="/pages/about">Our story</a>${contact}<a href="/policies/privacy">Privacy</a><a href="/policies/terms">Terms of sale</a></div>
+  </div><div class="shell footer-bottom"><span>© ${new Date().getUTCFullYear()} ${escapeHtml(legalName)}${storeContent.organizationNumber ? ` · ${escapeHtml(storeContent.organizationNumber)}` : ""}</span><span>Powered by <a href="https://reai.no" rel="external">ReAI</a></span></div></footer>
   <script src="/store.js" defer></script>
 </body>
 </html>`, { status, headers: HTML_HEADERS });
@@ -89,17 +106,19 @@ function home(site, store) {
   const products = (store.products || []).slice(0, 8);
   return page(site, store, "Home", `
     <section class="hero shell">
-      <div class="hero-copy"><span class="eyebrow">Welcome to ${escapeHtml(site.name)}</span>
-        <h1>Find something <em>worth keeping.</em></h1>
-        <p>Browse our latest products and discover the details that make each one special.</p>
+      <div class="hero-copy"><span class="eyebrow">${escapeHtml(storeContent.heroEyebrow)}</span>
+        <h1>${escapeHtml(storeContent.heroTitle)}</h1>
+        <p>${escapeHtml(storeContent.heroDescription)}</p>
         <a class="button" href="#products">Explore products <span aria-hidden="true">↗</span></a>
       </div>
-      <div class="hero-art" aria-hidden="true"><div class="hero-circle"></div><div class="hero-shape"></div><span>GOOD<br>THINGS<br>START<br>HERE</span></div>
+      <div class="hero-art"><img src="/storefront-hero.avif" alt="A considered arrangement of everyday objects" width="1536" height="1024" fetchpriority="high"></div>
     </section>
+    <section class="shell value-strip" aria-label="Shopping information"><div><strong>Curated selection</strong><span>Discover the latest arrivals</span></div><div><strong>Clear checkout</strong><span>Review your order before payment</span></div><div><strong>Here to help</strong><a href="/pages/contact">Get in touch <span aria-hidden="true">↗</span></a></div></section>
     ${collectionLinks ? `<section class="shell collection-section"><div class="section-heading"><span class="eyebrow">01 / Browse</span><h2>Explore collections</h2></div><div class="collection-grid">${collectionLinks}</div></section>` : ""}
     <section class="shell product-section" id="products"><div class="section-heading"><span class="eyebrow">02 / Discover</span><h2>Our products</h2></div>
       ${products.length ? `<div class="product-grid">${products.map((product) => card(product, store)).join("")}</div>` : `<p class="empty-state">No products have been published yet. Check back soon.</p>`}
-    </section>`);
+    </section>
+    <section class="shell story-panel"><div><span class="eyebrow">Meet the store</span><h2>More than a shopping list.</h2></div><div><p>${escapeHtml(storeContent.aboutIntro)}</p><a class="text-link" href="/pages/about">Get to know us <span aria-hidden="true">↗</span></a></div></section>`);
 }
 
 function collectionPage(site, store, collection) {
@@ -144,6 +163,51 @@ function completePage(site, store) {
     <span class="eyebrow">Thank you</span><h1>Your order is complete.</h1>
     <p class="lead">Your payment was completed in ReAI checkout. Look for your order confirmation.</p>
     <a class="button" href="/">Continue shopping</a></section>`);
+}
+
+function informationPage(site, store, slug) {
+  const name = escapeHtml(site.name);
+  const email = storeContent.contactEmail
+    ? `<a href="mailto:${escapeHtml(storeContent.contactEmail)}">${escapeHtml(storeContent.contactEmail)}</a>`
+    : "the contact address in your order confirmation";
+  const details = [
+    storeContent.legalName && `<p><strong>Registered business:</strong> ${escapeHtml(storeContent.legalName)}</p>`,
+    storeContent.organizationNumber && `<p><strong>Registration number:</strong> ${escapeHtml(storeContent.organizationNumber)}</p>`,
+    storeContent.address && `<p><strong>Business address:</strong> ${escapeHtml(storeContent.address)}</p>`,
+  ].filter(Boolean).join("");
+  const pages = {
+    "/pages/about": {
+      title: "About us", eyebrow: "The story", lead: storeContent.aboutIntro,
+      body: `<h2>Welcome to ${name}</h2><p>${escapeHtml(storeContent.aboutBody)}</p><p>Our selection changes as new products arrive. Browse the store to see what is available today.</p>${details}<a class="button" href="/#products">Explore the collection <span aria-hidden="true">↗</span></a>`,
+    },
+    "/pages/contact": {
+      title: "Contact us", eyebrow: "We're here to help", lead: "Have a question about a product or an order? We would love to hear from you.",
+      body: `<h2>Get in touch</h2><p>For order questions, include your order number so we can help you faster. Email us at ${email}.</p>${details}<p>For information about delivery and returns, visit the pages below.</p><div class="inline-links"><a href="/pages/shipping">Shipping &amp; delivery ↗</a><a href="/policies/returns">Returns ↗</a></div>`,
+    },
+    "/pages/shipping": {
+      title: "Shipping & delivery", eyebrow: "Your order", lead: "Delivery choices and their prices are shown before you place an order.",
+      body: `<h2>Delivery at checkout</h2><p>Enter your delivery details during checkout to see the available shipping methods and the total cost for your order. Availability and delivery times depend on the destination and the selected method.</p><h2>Need help?</h2><p>For questions about a delivery, please contact ${email} and include your order number.</p>`,
+    },
+    "/pages/faq": {
+      title: "Frequently asked questions", eyebrow: "Good to know", lead: "Answers to common questions about shopping with us.",
+      body: `<h2>How do I place an order?</h2><p>Add a product to your cart, review it, and continue to the secure checkout.</p><h2>When will I see shipping costs?</h2><p>Available delivery methods and their prices are shown during checkout, before you pay.</p><h2>Can I change or return an order?</h2><p>Contact ${email} as soon as possible. See our <a href="/policies/returns">returns page</a> for more information.</p>`,
+    },
+    "/policies/returns": {
+      title: "Returns", eyebrow: "After your purchase", lead: "If something is not right with your order, please get in touch.",
+      body: `<h2>Request a return</h2><p>Contact ${email} with your order number, the item concerned, and the reason for your request before sending anything back. We will explain the next steps and applicable costs.</p><p>Your statutory consumer rights remain unaffected.</p>`,
+    },
+    "/policies/privacy": {
+      title: "Privacy", eyebrow: "Your information", lead: "We use the information you provide to process and deliver your order.",
+      body: `<h2>Order information</h2><p>Checkout collects the contact, delivery, and payment information needed to complete your purchase. Payment is handled on ReAI's hosted checkout. Contact ${email} for questions about your personal information.</p>`,
+    },
+    "/policies/terms": {
+      title: "Terms of sale", eyebrow: "Before you order", lead: "Review your products, delivery choice, and total before confirming payment.",
+      body: `<h2>Prices and payment</h2><p>Product prices appear in the store's selected currency. The final total, including any delivery cost, is shown during checkout before you pay.</p><h2>Questions</h2><p>Contact ${email} if you have questions about an order.</p>`,
+    },
+  };
+  const content = pages[slug];
+  if (!content) return null;
+  return page(site, store, content.title, `<section class="shell editorial-page"><a class="breadcrumb" href="/">← Back to the store</a><div class="editorial-heading"><span class="eyebrow">${content.eyebrow}</span><h1>${content.title}</h1><p class="lead">${escapeHtml(content.lead)}</p></div><div class="editorial-body">${content.body}</div></section>`);
 }
 
 async function siteApi(baseUrl, credential, path, options = {}) {
@@ -202,8 +266,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method !== "GET" && request.method !== "HEAD" && request.method !== "POST") return new Response("Method not allowed", { status: 405 });
-    if (url.pathname === "/styles.css") return env.ASSETS.fetch(request);
-    if (url.pathname === "/store.js") return env.ASSETS.fetch(request);
+    if (["/styles.css", "/store.js", "/storefront-mark.svg", "/storefront-hero.avif"].includes(url.pathname)) return env.ASSETS.fetch(request);
     if (request.method === "POST") {
       if (url.pathname !== "/checkout/start") return json({ error: "Method not allowed" }, 405);
       if (request.headers.get("Origin") !== url.origin) return json({ error: "Invalid origin" }, 403);
@@ -245,6 +308,8 @@ export default {
 
       if (url.pathname === "/catalog.json") return json({ products: store.products, currency: store.currency, locale: store.locale });
       if (url.pathname === "/") return home(site, store);
+      const information = informationPage(site, store, url.pathname.replace(/\/$/, ""));
+      if (information) return information;
       if (url.pathname === "/cart") return cartPage(site, store);
       if (url.pathname === "/checkout/complete") return completePage(site, store);
       const collectionHandle = routeHandle(url.pathname, "collections");

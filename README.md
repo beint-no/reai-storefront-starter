@@ -1,6 +1,6 @@
 # ReAI storefront starter
 
-A small, public starting point for a Cloudflare Worker storefront backed by the ReAI Site API. It includes one neutral theme with a home page, collection pages, product pages, a cart, and hosted checkout. The store name, products, collections, images, and prices come from ReAI at request time; they are not copied into this repository.
+A public starting point for a Cloudflare Worker storefront backed by the ReAI Site API. It includes a home page, collection and product pages, a cart, hosted checkout, About, Contact, Shipping, FAQ, Returns, Privacy, and Terms pages. The store name, products, collections, images, and prices come from ReAI at request time; they are not copied into this repository.
 
 The browser keeps only public variant IDs and quantities in its cart. The Worker creates a checkout session with its server-side Site credential, then sends the shopper to ReAI for customer details, shipping, and payment. ReAI validates current prices and stock again at checkout.
 
@@ -33,8 +33,12 @@ Wrangler prints the local URL. The Worker requests `GET /site/v1/site` to find t
 ## Customize
 
 - Edit `public/styles.css` for colors, typography, and layout.
-- Edit `src/worker.js` for page copy and HTML structure. Look for `home`, `collectionPage`, and `productPage`.
+- Edit `src/store-content.js` for the headline, store story, public contact email, registered business name, registration number, and business address.
+- Replace `public/storefront-mark.svg` and `public/storefront-hero.avif` with your own brand assets. The included hero is a generated editorial image; it does not depict products sold by the merchant.
+- Edit `src/worker.js` for page structure and detailed information-page copy. Look for `home`, `informationPage`, `collectionPage`, and `productPage`.
 - Publish products, collections, images, and prices in ReAI. Catalog changes then appear without rebuilding the Worker.
+
+Before a customer launch, set a real customer-service address and registered business details in `src/store-content.js`. Review the Shipping, Returns, Privacy, and Terms pages in `informationPage` against the merchant's actual practices and applicable law. The included copy is an editable starting point; it does not supply merchant-specific delivery promises, a return address, or a complete legal notice. When `contactEmail` is blank, the Contact page tells shoppers to use the address in their order confirmation.
 
 The starter selects the Site's default market and its default locale. Add an explicit market/locale selector before serving a store that needs shoppers to change either one. No merchant name, product data, domain, or Site credential is committed here.
 
