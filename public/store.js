@@ -1,6 +1,17 @@
 const CART_KEY = "reai-storefront-cart-v1";
 const CHECKOUT_KEY = "reai-storefront-checkout-started";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TEXT = /^(?:nb|nn|no)(?:-|$)/i.test(document.documentElement.lang) ? {
+  added: "Lagt i handlekurven.", saveError: "Nettleseren kunne ikke lagre handlekurven.", empty: "Handlekurven er tom.",
+  unavailableProduct: "Utilgjengelig produkt", removeToContinue: "Fjern produktet for å fortsette", quantity: "Antall for",
+  remove: "Fjern", estimatedTotal: "Estimert totalsum", cartUnavailable: "Handlekurven er midlertidig utilgjengelig. Prøv igjen.",
+  openingCheckout: "Åpner kassen…", checkout: "Gå til kassen", checkoutError: "Kunne ikke starte betalingen.",
+} : {
+  added: "Added to cart.", saveError: "Your browser could not save the cart.", empty: "Your cart is empty.",
+  unavailableProduct: "Unavailable product", removeToContinue: "Remove this item to continue", quantity: "Quantity for",
+  remove: "Remove", estimatedTotal: "Estimated total", cartUnavailable: "The cart is temporarily unavailable. Please try again.",
+  openingCheckout: "Opening checkout…", checkout: "Continue to checkout", checkoutError: "Checkout could not be started.",
+};
 
 function readCart() {
   try {
@@ -34,9 +45,9 @@ addForm?.addEventListener("submit", (event) => {
   else cart.push({ variantId, quantity });
   try {
     saveCart(cart);
-    message.textContent = "Added to cart.";
+    message.textContent = TEXT.added;
   } catch {
-    message.textContent = "Your browser could not save the cart.";
+    message.textContent = TEXT.saveError;
   }
 });
 
@@ -55,7 +66,7 @@ if (cartRoot) {
     if (!cart.length) {
       const empty = document.createElement("p");
       empty.className = "empty-state";
-      empty.textContent = "Your cart is empty.";
+      empty.textContent = TEXT.empty;
       cartRoot.append(empty);
       checkoutButton.disabled = true;
       cartTotal.textContent = "";
@@ -68,16 +79,16 @@ if (cartRoot) {
       row.className = "cart-row";
       const title = document.createElement(found ? "a" : "span");
       if (found) title.href = `/products/${encodeURIComponent(found.product.handle)}`;
-      title.textContent = found?.product.title || "Unavailable product";
+      title.textContent = found?.product.title || TEXT.unavailableProduct;
       const detail = document.createElement("span");
       detail.textContent = found ? new Intl.NumberFormat(catalog.locale, { style: "currency", currency: catalog.currency })
-        .format(Number(found.variant.price)) : "Remove this item to continue";
+        .format(Number(found.variant.price)) : TEXT.removeToContinue;
       const quantity = document.createElement("input");
       quantity.type = "number";
       quantity.min = "1";
       quantity.max = "20";
       quantity.value = String(item.quantity);
-      quantity.setAttribute("aria-label", `Quantity for ${title.textContent}`);
+      quantity.setAttribute("aria-label", `${TEXT.quantity} ${title.textContent}`);
       quantity.addEventListener("change", () => {
         const next = Number(quantity.value);
         if (Number.isInteger(next) && next >= 1 && next <= 20) {
@@ -88,7 +99,7 @@ if (cartRoot) {
       });
       const remove = document.createElement("button");
       remove.type = "button";
-      remove.textContent = "Remove";
+      remove.textContent = TEXT.remove;
       remove.addEventListener("click", () => {
         saveCart(cart.filter((entry) => entry.variantId !== item.variantId));
         render();
@@ -98,7 +109,7 @@ if (cartRoot) {
       if (found) total += Number(found.variant.price) * item.quantity;
     }
     checkoutButton.disabled = cart.some((item) => !variants.has(item.variantId));
-    cartTotal.textContent = `Estimated total: ${new Intl.NumberFormat(catalog.locale, { style: "currency", currency: catalog.currency }).format(total)}`;
+    cartTotal.textContent = `${TEXT.estimatedTotal}: ${new Intl.NumberFormat(catalog.locale, { style: "currency", currency: catalog.currency }).format(total)}`;
   }
 
   fetch("/catalog.json").then((response) => {
@@ -108,13 +119,13 @@ if (cartRoot) {
     catalog = value;
     render();
   }).catch(() => {
-    cartRoot.textContent = "The cart is temporarily unavailable. Please try again.";
+    cartRoot.textContent = TEXT.cartUnavailable;
   });
 
   checkoutButton.addEventListener("click", async () => {
     if (checkoutButton.disabled) return;
     checkoutButton.disabled = true;
-    checkoutButton.textContent = "Opening checkout…";
+    checkoutButton.textContent = TEXT.openingCheckout;
     checkoutError.hidden = true;
     try {
       const response = await fetch("/checkout/start", {
@@ -123,14 +134,14 @@ if (cartRoot) {
         body: JSON.stringify({ lines: readCart() }),
       });
       const result = await response.json();
-      if (!response.ok || !result.checkoutUrl) throw new Error(result.detail || result.error || "Checkout could not be started.");
+      if (!response.ok || !result.checkoutUrl) throw new Error(result.detail || result.error || TEXT.checkoutError);
       sessionStorage.setItem(CHECKOUT_KEY, "1");
       location.assign(result.checkoutUrl);
     } catch (error) {
-      checkoutError.textContent = error.message || "Checkout could not be started.";
+      checkoutError.textContent = error.message || TEXT.checkoutError;
       checkoutError.hidden = false;
       checkoutError.focus();
-      checkoutButton.textContent = "Continue to checkout";
+      checkoutButton.textContent = TEXT.checkout;
       render();
     }
   });

@@ -1,4 +1,5 @@
 import { storeContent } from "./store-content.js";
+import { language, ui } from "./ui-copy.js";
 
 const HTML_HEADERS = {
   "content-type": "text/html; charset=utf-8",
@@ -35,7 +36,7 @@ function price(value, currency, locale) {
 function productPrice(product, store) {
   const prices = (product.variants || []).map((variant) => Number(variant.price)).filter(Number.isFinite);
   if (!prices.length) return "";
-  const prefix = new Set(prices).size > 1 ? "From " : "";
+  const prefix = new Set(prices).size > 1 ? ui(store.locale).from : "";
   return `${prefix}${price(Math.min(...prices), store.currency, store.locale)}`;
 }
 
@@ -51,14 +52,13 @@ function card(product, store) {
   return `<a class="product-card" href="${href}">
     <div class="product-image">${picture(product)}</div>
     <div class="product-meta"><h3>${escapeHtml(product.title)}</h3><span>${escapeHtml(productPrice(product, store))}</span></div>
-    <span class="text-link">View product <span aria-hidden="true">↗</span></span>
+    <span class="text-link">${ui(store.locale).viewProduct} <span aria-hidden="true">↗</span></span>
   </a>`;
 }
 
 function page(site, store, title, body, status = 200) {
-  const collections = (store?.collections || []).slice(0, 4).map((collection) =>
-    `<a href="/collections/${encodeURIComponent(collection.handle)}">${escapeHtml(collection.title)}</a>`,
-  ).join("");
+  const t = ui(store?.locale);
+  const content = storeContent[language(store?.locale)];
   const name = site?.name || "Storefront";
   const legalName = storeContent.legalName || name;
   const footerCollections = (store?.collections || []).slice(0, 3).map((collection) =>
@@ -66,148 +66,155 @@ function page(site, store, title, body, status = 200) {
   ).join("");
   const contact = storeContent.contactEmail
     ? `<a href="mailto:${escapeHtml(storeContent.contactEmail)}">${escapeHtml(storeContent.contactEmail)}</a>`
-    : `<a href="/pages/contact">Contact us</a>`;
+    : `<a href="/pages/contact">${t.contact}</a>`;
   return new Response(`<!doctype html>
-<html lang="${escapeHtml(store?.locale || "en")}">
+<html lang="${escapeHtml(store?.locale || "nb")}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Explore ${escapeHtml(name)} products and collections.">
+  <meta name="description" content="${t.meta} ${escapeHtml(name)}.">
   <meta name="theme-color" content="#21443b">
   <title>${escapeHtml(title)} · ${escapeHtml(name)}</title>
   <link rel="icon" href="/storefront-mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <a class="skip-link" href="#main">Skip to content</a>
-  <div class="announcement">${escapeHtml(storeContent.tagline)}</div>
+  <a class="skip-link" href="#main">${t.skip}</a>
+  <div class="announcement">${escapeHtml(content.tagline)}</div>
   <header class="site-header shell">
     <a class="wordmark" href="/"><img src="/storefront-mark.svg" alt="" width="38" height="38">${escapeHtml(name)}</a>
-    <nav aria-label="Main navigation"><a href="/#products">Shop</a>${collections}<a href="/pages/about">About</a><a href="/pages/contact">Contact</a><a class="cart-link" href="/cart">Cart <span data-cart-count>0</span></a></nav>
+    <nav aria-label="${t.shop}"><a href="/collections/all">${t.shop}</a><a href="/collections">${t.collections}</a><a href="/pages/about">${t.about}</a><a href="/pages/contact">${t.contact}</a><a class="cart-link" href="/cart">${t.cart} <span data-cart-count>0</span></a></nav>
   </header>
   <main id="main">${body}</main>
   <footer class="site-footer"><div class="shell footer-grid">
-    <div class="footer-brand"><a class="wordmark" href="/"><img src="/storefront-mark.svg" alt="" width="38" height="38">${escapeHtml(name)}</a><p>${escapeHtml(storeContent.aboutIntro)}</p></div>
-    <div><h2>Shop</h2><a href="/#products">All products</a>${footerCollections}<a href="/cart">Your cart</a></div>
-    <div><h2>Help</h2><a href="/pages/contact">Contact</a><a href="/pages/shipping">Shipping &amp; delivery</a><a href="/pages/faq">FAQs</a><a href="/policies/returns">Returns</a></div>
-    <div><h2>About</h2><a href="/pages/about">Our story</a>${contact}<a href="/policies/privacy">Privacy</a><a href="/policies/terms">Terms of sale</a></div>
-  </div><div class="shell footer-bottom"><span>© ${new Date().getUTCFullYear()} ${escapeHtml(legalName)}${storeContent.organizationNumber ? ` · ${escapeHtml(storeContent.organizationNumber)}` : ""}</span><span>Powered by <a href="https://reai.no" rel="external">ReAI</a></span></div></footer>
+    <div class="footer-brand"><a class="wordmark" href="/"><img src="/storefront-mark.svg" alt="" width="38" height="38">${escapeHtml(name)}</a><p>${escapeHtml(content.aboutIntro)}</p></div>
+    <div><h2>${t.shop}</h2><a href="/collections/all">${t.allProducts}</a><a href="/collections">${t.collections}</a>${footerCollections}<a href="/cart">${t.yourCart}</a></div>
+    <div><h2>${t.help}</h2><a href="/pages/contact">${t.contact}</a><a href="/pages/shipping">${t.shipping}</a><a href="/pages/faq">${t.faq}</a><a href="/policies/returns">${t.returns}</a></div>
+    <div><h2>${t.about}</h2><a href="/pages/about">${t.ourStory}</a>${contact}<a href="/policies/privacy">${t.privacy}</a><a href="/policies/terms">${t.terms}</a></div>
+  </div><div class="shell footer-bottom"><span>© ${new Date().getUTCFullYear()} ${escapeHtml(legalName)}${storeContent.organizationNumber ? ` · ${escapeHtml(storeContent.organizationNumber)}` : ""}</span><span>${t.poweredBy} <a href="https://reai.no" rel="external">ReAI</a></span></div></footer>
   <script src="/store.js" defer></script>
 </body>
 </html>`, { status, headers: HTML_HEADERS });
 }
 
 function home(site, store) {
-  const collectionLinks = (store.collections || []).slice(0, 3).map((collection, index) =>
-    `<a class="collection-tile collection-tile-${index + 1}" href="/collections/${encodeURIComponent(collection.handle)}">
-      <span>Collection ${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(collection.title)}</strong><span aria-hidden="true">↗</span>
-    </a>`,
-  ).join("");
+  const t = ui(store.locale);
+  const content = storeContent[language(store.locale)];
+  const collectionLinks = (store.collections || []).slice(0, 3).map((collection, index) => collectionTile(collection, index, store)).join("");
   const products = (store.products || []).slice(0, 8);
-  return page(site, store, "Home", `
+  return page(site, store, t.shop, `
     <section class="hero shell">
-      <div class="hero-copy"><span class="eyebrow">${escapeHtml(storeContent.heroEyebrow)}</span>
-        <h1>${escapeHtml(storeContent.heroTitle)}</h1>
-        <p>${escapeHtml(storeContent.heroDescription)}</p>
-        <a class="button" href="#products">Explore products <span aria-hidden="true">↗</span></a>
+      <div class="hero-copy"><span class="eyebrow">${escapeHtml(content.heroEyebrow)}</span>
+        <h1>${escapeHtml(content.heroTitle)}</h1>
+        <p>${escapeHtml(content.heroDescription)}</p>
+        <a class="button" href="/collections/all">${t.discoverProducts} <span aria-hidden="true">↗</span></a>
       </div>
-      <div class="hero-art"><img src="/storefront-hero.avif" alt="A considered arrangement of everyday objects" width="1536" height="1024" fetchpriority="high"></div>
+      <div class="hero-art"><img src="/storefront-hero.avif" alt="" width="1536" height="1024" fetchpriority="high"></div>
     </section>
-    <section class="shell value-strip" aria-label="Shopping information"><div><strong>Curated selection</strong><span>Discover the latest arrivals</span></div><div><strong>Clear checkout</strong><span>Review your order before payment</span></div><div><strong>Here to help</strong><a href="/pages/contact">Get in touch <span aria-hidden="true">↗</span></a></div></section>
-    ${collectionLinks ? `<section class="shell collection-section"><div class="section-heading"><span class="eyebrow">01 / Browse</span><h2>Explore collections</h2></div><div class="collection-grid">${collectionLinks}</div></section>` : ""}
-    <section class="shell product-section" id="products"><div class="section-heading"><span class="eyebrow">02 / Discover</span><h2>Our products</h2></div>
-      ${products.length ? `<div class="product-grid">${products.map((product) => card(product, store)).join("")}</div>` : `<p class="empty-state">No products have been published yet. Check back soon.</p>`}
+    <section class="shell value-strip" aria-label="${t.shop}"><div><strong>${t.curatedSelection}</strong><span>${t.latestArrivals}</span></div><div><strong>${t.clearCheckout}</strong><span>${t.reviewOrder}</span></div><div><strong>${t.hereHelp}</strong><a href="/pages/contact">${t.getInTouch} <span aria-hidden="true">↗</span></a></div></section>
+    ${collectionLinks ? `<section class="shell collection-section"><div class="section-heading"><span class="eyebrow">${t.collectionEyebrow}</span><h2>${t.exploreCollections}</h2><a class="text-link" href="/collections">${t.collections} ↗</a></div><div class="collection-grid">${collectionLinks}</div></section>` : ""}
+    <section class="shell product-section" id="products"><div class="section-heading"><span class="eyebrow">${t.productsEyebrow}</span><h2>${t.ourProducts}</h2><a class="text-link" href="/collections/all">${t.allProducts} ↗</a></div>
+      ${products.length ? `<div class="product-grid">${products.map((product) => card(product, store)).join("")}</div>` : `<p class="empty-state">${t.emptyProducts}</p>`}
     </section>
-    <section class="shell story-panel"><div><span class="eyebrow">Meet the store</span><h2>More than a shopping list.</h2></div><div><p>${escapeHtml(storeContent.aboutIntro)}</p><a class="text-link" href="/pages/about">Get to know us <span aria-hidden="true">↗</span></a></div></section>`);
+    <section class="shell story-panel"><div><span class="eyebrow">${t.meetStore}</span><h2>${t.storyHeading}</h2></div><div><p>${escapeHtml(content.aboutIntro)}</p><a class="text-link" href="/pages/about">${t.knowUs} <span aria-hidden="true">↗</span></a></div></section>`);
+}
+
+function collectionTile(collection, index, store) {
+  const t = ui(store.locale);
+  const image = imageUrl(collection.imageUrl);
+  return `<a class="collection-tile collection-tile-${index % 3 + 1}${image ? " has-image" : ""}" href="/collections/${encodeURIComponent(collection.handle)}">
+    ${image ? `<img src="${escapeHtml(image)}" alt="" loading="lazy">` : ""}<span>${t.collection} ${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(collection.title)}</strong><span aria-hidden="true">↗</span>
+  </a>`;
+}
+
+function collectionsPage(site, store) {
+  const t = ui(store.locale);
+  const collections = store.collections || [];
+  return page(site, store, t.collections, `<section class="shell inner-page">
+    <a class="breadcrumb" href="/">${t.backStore}</a><span class="eyebrow">${t.collectionEyebrow}</span><h1>${t.collections}</h1>
+    ${collections.length ? `<div class="collection-grid">${collections.map((collection, index) => collectionTile(collection, index, store)).join("")}</div>` : `<p class="empty-state">${t.noCollections}</p>`}
+    <a class="text-link browse-all-link" href="/collections/all">${t.allProducts} ↗</a>
+  </section>`);
+}
+
+function allProductsPage(site, store) {
+  const t = ui(store.locale);
+  const products = store.products || [];
+  return page(site, store, t.allProducts, `<section class="shell inner-page">
+    <a class="breadcrumb" href="/collections">← ${t.collections}</a><span class="eyebrow">${t.productsEyebrow}</span><h1>${t.allProducts}</h1>
+    ${products.length ? `<div class="product-grid">${products.map((product) => card(product, store)).join("")}</div>` : `<p class="empty-state">${t.emptyProducts}</p>`}
+  </section>`);
 }
 
 function collectionPage(site, store, collection) {
+  const t = ui(store.locale);
   const included = new Set((collection.products || []).map((product) => product.id));
   const products = (store.products || []).filter((product) => included.has(product.id));
   return page(site, store, collection.title, `<section class="shell inner-page">
-    <a class="breadcrumb" href="/">← All products</a><span class="eyebrow">Collection</span>
+    <a class="breadcrumb" href="/collections">← ${t.collections}</a><span class="eyebrow">${t.collection}</span>
     <h1>${escapeHtml(collection.title)}</h1>${collection.description ? `<p class="lead">${escapeHtml(collection.description)}</p>` : ""}
-    ${products.length ? `<div class="product-grid">${products.map((product) => card(product, store)).join("")}</div>` : `<p class="empty-state">This collection has no published products yet.</p>`}
+    ${products.length ? `<div class="product-grid">${products.map((product) => card(product, store)).join("")}</div>` : `<p class="empty-state">${t.noCollectionProducts}</p>`}
   </section>`);
 }
 
 function productPage(site, store, product) {
+  const t = ui(store.locale);
   const options = (product.variants || []).map((variant) => {
-    const label = variant.options?.map((option) => `${option.name}: ${option.value}`).join(" · ") || "Standard";
+    const label = variant.options?.map((option) => `${option.name}: ${option.value}`).join(" · ") || t.standard;
     return `<option value="${escapeHtml(variant.id)}">${escapeHtml(label)} · ${escapeHtml(price(variant.price, store.currency, store.locale))}</option>`;
   }).join("");
   return page(site, store, product.title, `<section class="shell inner-page">
-    <a class="breadcrumb" href="/">← All products</a>
+    <a class="breadcrumb" href="/collections/all">${t.backAllProducts}</a>
     <div class="product-detail"><div class="detail-image">${picture(product)}</div>
       <div class="detail-copy"><span class="eyebrow">${escapeHtml(product.brand || site.name)}</span>
         <h1>${escapeHtml(product.title)}</h1><p class="detail-price">${escapeHtml(productPrice(product, store))}</p>
         ${product.description ? `<p class="lead">${escapeHtml(product.description)}</p>` : ""}
-        ${options ? `<form data-add-to-cart><label for="variant">Options</label><select id="variant" name="variantId" required>${options}</select>
-          <label for="quantity">Quantity</label><input id="quantity" name="quantity" type="number" min="1" max="20" value="1" required>
-          <button class="button" type="submit">Add to cart</button><p data-add-message role="status"></p></form>` : ""}
+        ${options ? `<form data-add-to-cart><label for="variant">${t.options}</label><select id="variant" name="variantId" required>${options}</select>
+          <label for="quantity">${t.quantity}</label><input id="quantity" name="quantity" type="number" min="1" max="20" value="1" required>
+          <button class="button" type="submit">${t.addToCart}</button><p data-add-message role="status"></p></form>` : ""}
       </div>
     </div>
   </section>`);
 }
 
 function cartPage(site, store) {
-  return page(site, store, "Cart", `<section class="shell inner-page"><a class="breadcrumb" href="/">← Continue shopping</a>
-    <h1>Your cart</h1><div data-cart-items><p>Loading cart…</p></div><p data-cart-total class="cart-total"></p>
-    <button class="button" type="button" data-start-checkout disabled>Continue to checkout</button>
+  const t = ui(store.locale);
+  return page(site, store, t.cart, `<section class="shell inner-page"><a class="breadcrumb" href="/collections/all">${t.continueShopping}</a>
+    <h1>${t.yourCart}</h1><div data-cart-items><p>${t.loadingCart}</p></div><p data-cart-total class="cart-total"></p>
+    <button class="button" type="button" data-start-checkout disabled>${t.checkout}</button>
     <p data-checkout-error role="alert" tabindex="-1" hidden></p>
-    <p class="cart-note">ReAI confirms prices, availability, shipping and payment on the secure checkout page.</p></section>`);
+    <p class="cart-note">${t.cartNote}</p></section>`);
 }
 
 function completePage(site, store) {
-  return page(site, store, "Order complete", `<section class="shell inner-page" data-checkout-complete>
-    <span class="eyebrow">Thank you</span><h1>Your order is complete.</h1>
-    <p class="lead">Your payment was completed in ReAI checkout. Look for your order confirmation.</p>
-    <a class="button" href="/">Continue shopping</a></section>`);
+  const t = ui(store.locale);
+  return page(site, store, t.orderComplete, `<section class="shell inner-page" data-checkout-complete>
+    <span class="eyebrow">${t.thankYou}</span><h1>${t.orderCompleteHeading}</h1>
+    <p class="lead">${t.orderCompleteText}</p>
+    <a class="button" href="/collections/all">${t.continueToStore}</a></section>`);
 }
 
 function informationPage(site, store, slug) {
-  const name = escapeHtml(site.name);
-  const email = storeContent.contactEmail
-    ? `<a href="mailto:${escapeHtml(storeContent.contactEmail)}">${escapeHtml(storeContent.contactEmail)}</a>`
-    : "the contact address in your order confirmation";
-  const details = [
-    storeContent.legalName && `<p><strong>Registered business:</strong> ${escapeHtml(storeContent.legalName)}</p>`,
-    storeContent.organizationNumber && `<p><strong>Registration number:</strong> ${escapeHtml(storeContent.organizationNumber)}</p>`,
-    storeContent.address && `<p><strong>Business address:</strong> ${escapeHtml(storeContent.address)}</p>`,
-  ].filter(Boolean).join("");
-  const pages = {
-    "/pages/about": {
-      title: "About us", eyebrow: "The story", lead: storeContent.aboutIntro,
-      body: `<h2>Welcome to ${name}</h2><p>${escapeHtml(storeContent.aboutBody)}</p><p>Our selection changes as new products arrive. Browse the store to see what is available today.</p>${details}<a class="button" href="/#products">Explore the collection <span aria-hidden="true">↗</span></a>`,
-    },
-    "/pages/contact": {
-      title: "Contact us", eyebrow: "We're here to help", lead: "Have a question about a product or an order? We would love to hear from you.",
-      body: `<h2>Get in touch</h2><p>For order questions, include your order number so we can help you faster. Email us at ${email}.</p>${details}<p>For information about delivery and returns, visit the pages below.</p><div class="inline-links"><a href="/pages/shipping">Shipping &amp; delivery ↗</a><a href="/policies/returns">Returns ↗</a></div>`,
-    },
-    "/pages/shipping": {
-      title: "Shipping & delivery", eyebrow: "Your order", lead: "Delivery choices and their prices are shown before you place an order.",
-      body: `<h2>Delivery at checkout</h2><p>Enter your delivery details during checkout to see the available shipping methods and the total cost for your order. Availability and delivery times depend on the destination and the selected method.</p><h2>Need help?</h2><p>For questions about a delivery, please contact ${email} and include your order number.</p>`,
-    },
-    "/pages/faq": {
-      title: "Frequently asked questions", eyebrow: "Good to know", lead: "Answers to common questions about shopping with us.",
-      body: `<h2>How do I place an order?</h2><p>Add a product to your cart, review it, and continue to the secure checkout.</p><h2>When will I see shipping costs?</h2><p>Available delivery methods and their prices are shown during checkout, before you pay.</p><h2>Can I change or return an order?</h2><p>Contact ${email} as soon as possible. See our <a href="/policies/returns">returns page</a> for more information.</p>`,
-    },
-    "/policies/returns": {
-      title: "Returns", eyebrow: "After your purchase", lead: "If something is not right with your order, please get in touch.",
-      body: `<h2>Request a return</h2><p>Contact ${email} with your order number, the item concerned, and the reason for your request before sending anything back. We will explain the next steps and applicable costs.</p><p>Your statutory consumer rights remain unaffected.</p>`,
-    },
-    "/policies/privacy": {
-      title: "Privacy", eyebrow: "Your information", lead: "We use the information you provide to process and deliver your order.",
-      body: `<h2>Order information</h2><p>Checkout collects the contact, delivery, and payment information needed to complete your purchase. Payment is handled on ReAI's hosted checkout. Contact ${email} for questions about your personal information.</p>`,
-    },
-    "/policies/terms": {
-      title: "Terms of sale", eyebrow: "Before you order", lead: "Review your products, delivery choice, and total before confirming payment.",
-      body: `<h2>Prices and payment</h2><p>Product prices appear in the store's selected currency. The final total, including any delivery cost, is shown during checkout before you pay.</p><h2>Questions</h2><p>Contact ${email} if you have questions about an order.</p>`,
-    },
-  };
-  const content = pages[slug];
+  const t = ui(store.locale);
+  const key = {
+    "/pages/about": "about", "/pages/contact": "contact", "/pages/shipping": "shipping",
+    "/pages/faq": "faq", "/policies/returns": "returns", "/policies/privacy": "privacy",
+    "/policies/terms": "terms",
+  }[slug];
+  const content = storeContent[language(store.locale)].pages[key];
   if (!content) return null;
-  return page(site, store, content.title, `<section class="shell editorial-page"><a class="breadcrumb" href="/">← Back to the store</a><div class="editorial-heading"><span class="eyebrow">${content.eyebrow}</span><h1>${content.title}</h1><p class="lead">${escapeHtml(content.lead)}</p></div><div class="editorial-body">${content.body}</div></section>`);
+  const contact = storeContent.contactEmail
+    ? `<a href="mailto:${escapeHtml(storeContent.contactEmail)}">${escapeHtml(storeContent.contactEmail)}</a>`
+    : t.fallbackContact;
+  const renderText = (value) => escapeHtml(value).replaceAll("{name}", escapeHtml(site.name)).replaceAll("{contact}", contact);
+  const details = [
+    storeContent.legalName && `<p><strong>${t.business}:</strong> ${escapeHtml(storeContent.legalName)}</p>`,
+    storeContent.organizationNumber && `<p><strong>${t.organizationNumber}:</strong> ${escapeHtml(storeContent.organizationNumber)}</p>`,
+    storeContent.address && `<p><strong>${t.address}:</strong> ${escapeHtml(storeContent.address)}</p>`,
+  ].filter(Boolean).join("");
+  const sections = content.sections.map(([heading, body]) => `<h2>${renderText(heading)}</h2><p>${renderText(body)}</p>`).join("");
+  const links = key === "contact" ? `<div class="inline-links"><a href="/pages/shipping">${t.shipping} ↗</a><a href="/policies/returns">${t.returns} ↗</a></div>` : "";
+  return page(site, store, content.title, `<section class="shell editorial-page"><a class="breadcrumb" href="/">${t.backStore}</a><div class="editorial-heading"><span class="eyebrow">${escapeHtml(content.eyebrow)}</span><h1>${escapeHtml(content.title)}</h1><p class="lead">${escapeHtml(content.lead)}</p></div><div class="editorial-body">${sections}${details}${links}</div></section>`);
 }
 
 async function siteApi(baseUrl, credential, path, options = {}) {
@@ -274,7 +281,8 @@ export default {
     }
 
     if (!env.REAI_API_BASE_URL || !env.REAI_SITE_CREDENTIAL) {
-      return page(null, null, "Coming soon", `<section class="shell inner-page"><span class="eyebrow">Coming soon</span><h1>Something good is on its way.</h1><p class="lead">This storefront is being set up.</p></section>`, 503);
+      const t = ui("en");
+      return page(null, { locale: "en" }, t.comingSoon, `<section class="shell inner-page"><span class="eyebrow">${t.comingSoon}</span><h1>${t.setupHeading}</h1><p class="lead">${t.setupText}</p></section>`, 503);
     }
 
     try {
@@ -308,6 +316,8 @@ export default {
 
       if (url.pathname === "/catalog.json") return json({ products: store.products, currency: store.currency, locale: store.locale });
       if (url.pathname === "/") return home(site, store);
+      if (/^\/collections\/?$/.test(url.pathname)) return collectionsPage(site, store);
+      if (/^\/collections\/all\/?$/.test(url.pathname)) return allProductsPage(site, store);
       const information = informationPage(site, store, url.pathname.replace(/\/$/, ""));
       if (information) return information;
       if (url.pathname === "/cart") return cartPage(site, store);
@@ -322,10 +332,12 @@ export default {
         const product = store.products?.find((entry) => entry.handle === productHandle);
         if (product) return productPage(site, store, product);
       }
-      return page(site, store, "Not found", `<section class="shell inner-page"><span class="eyebrow">404</span><h1>We couldn't find that page.</h1><a class="button" href="/">Back to the store</a></section>`, 404);
+      const t = ui(store.locale);
+      return page(site, store, t.notFound, `<section class="shell inner-page"><span class="eyebrow">404</span><h1>${t.notFoundHeading}</h1><a class="button" href="/">${t.backToStore}</a></section>`, 404);
     } catch {
       if (url.pathname === "/checkout/start") return json({ error: "Checkout is temporarily unavailable" }, 502);
-      return page(null, null, "Temporarily unavailable", `<section class="shell inner-page"><span class="eyebrow">Please try again</span><h1>The store is temporarily unavailable.</h1><p class="lead">We couldn't load the catalog right now.</p></section>`, 502);
+      const t = ui("en");
+      return page(null, { locale: "en" }, t.temporarilyUnavailable, `<section class="shell inner-page"><span class="eyebrow">${t.tryAgain}</span><h1>${t.unavailableHeading}</h1><p class="lead">${t.unavailableText}</p></section>`, 502);
     }
   },
 };
