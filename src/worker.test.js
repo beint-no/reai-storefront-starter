@@ -50,6 +50,24 @@ test("shows setup page without making an upstream request when configuration is 
   assert.match(await response.text(), /being set up/);
 });
 
+test("renders editable information pages and linked footer without exposing credentials", async (context) => {
+  context.mock.method(globalThis, "fetch", async (input) => Response.json(String(input).endsWith("/site/v1/site") ? site : store));
+  const env = { REAI_API_BASE_URL: "https://app.example.test", REAI_SITE_CREDENTIAL: "private-token" };
+  for (const path of ["/pages/about", "/pages/contact", "/pages/shipping", "/pages/faq", "/policies/returns", "/policies/privacy", "/policies/terms"]) {
+    const response = await worker.fetch(new Request(`https://store.example${path}`), env);
+    const html = await response.text();
+    assert.equal(response.status, 200, path);
+    assert.match(html, /Sample &lt;Shop&gt;/);
+    assert.match(html, /<footer class="site-footer">/);
+    assert.doesNotMatch(html, /private-token/);
+  }
+  const home = await worker.fetch(new Request("https://store.example/"), env);
+  const html = await home.text();
+  assert.match(html, /storefront-hero\.avif/);
+  assert.match(html, /href="\/pages\/about"/);
+  assert.match(html, /href="\/policies\/returns"/);
+});
+
 test("creates a hosted checkout session without exposing the Site credential", async (context) => {
   const calls = [];
   context.mock.method(globalThis, "fetch", async (input, options) => {
