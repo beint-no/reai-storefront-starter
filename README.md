@@ -1,8 +1,10 @@
 # ReAI storefront starter
 
-A small, public starting point for a Cloudflare Worker storefront backed by the ReAI Site API. It includes one neutral theme with a home page, collection pages, and product pages. The store name, products, collections, images, and prices come from ReAI at request time; they are not copied into this repository.
+A small, public starting point for a Cloudflare Worker storefront backed by the ReAI Site API. It includes one neutral theme with a home page, collection pages, product pages, a cart, and hosted checkout. The store name, products, collections, images, and prices come from ReAI at request time; they are not copied into this repository.
 
-This first starter is **catalog only**. It does not create checkout sessions or claim that products are available to buy. Checkout, deployment automation, and custom domains can be added in later steps.
+The browser keeps only public variant IDs and quantities in its cart. The Worker creates a checkout session with its server-side Site credential, then sends the shopper to ReAI for customer details, shipping, and payment. ReAI validates current prices and stock again at checkout.
+
+Payment requires an active Adyen ecommerce store for the tenant and a configured ReAI Adyen management API key. A Site can show its catalog and open hosted checkout before those payment prerequisites are ready, but payment will remain unavailable.
 
 ## Run locally
 
@@ -16,7 +18,9 @@ cp .dev.vars.example .dev.vars
 Edit the ignored `.dev.vars` file:
 
 - `REAI_API_BASE_URL`: the ReAI backend origin, such as `http://localhost:8080` for a local application or `https://app.reai.no` for production.
-- `REAI_SITE_CREDENTIAL`: a Site credential with `site:read` and `commerce:catalog:read` scopes. Keep it server-side.
+- `REAI_SITE_CREDENTIAL`: a Site credential with `site:read`, `commerce:catalog:read`, and `commerce:checkout:create` scopes. Keep it server-side.
+
+Set the Site's preview domain to the storefront hostname before starting checkout. ReAI accepts the checkout return URL only when it matches the Site's active or preview domain. For local HTTP development, use a public HTTPS tunnel and its hostname.
 
 Then run:
 
@@ -24,7 +28,7 @@ Then run:
 npm run dev
 ```
 
-Wrangler prints the local URL. The Worker requests `GET /site/v1/site` to find the Site name and default market, then `GET /site/v1/commerce/storefront` for the current catalog. If either request fails, visitors see a generic unavailable page; backend errors and credentials are not shown.
+Wrangler prints the local URL. The Worker requests `GET /site/v1/site` to find the Site name and default market, then `GET /site/v1/commerce/storefront` for the current catalog. Checkout posts to the Worker at `/checkout/start`; the Worker calls `POST /site/v1/commerce/checkout-sessions` and returns only the hosted checkout URL. If catalog requests fail, visitors see a generic unavailable page; credentials are not shown.
 
 ## Customize
 
