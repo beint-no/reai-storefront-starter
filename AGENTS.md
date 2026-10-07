@@ -1,7 +1,7 @@
 # Private operational provisioning template
 
 Canonical code lives in public beint-no/reai-site-examples. Refresh this template
-from the everyday-store exporter; do not develop a second design source here.
+from the storefront exporter; do not develop a second design source here.
 Keep the GitHub template private, the provisioning App's repository access and
 the existing runtime binding names intact. Never commit secrets or client data.
 
@@ -12,7 +12,7 @@ PRs and squash merges; run npm run check and a Wrangler dry run after refreshing
 
 ## Refresh the operational copy
 
-Run `npm run export -- everyday-store /absolute/new/export-directory` in the
+Run `npm run export -- storefront /absolute/new/export-directory` in the
 public source repo. Copy that output into a dedicated worktree of this repo,
 regenerate package-lock.json with npm install, run npm run check and a Wrangler
 dry run, review the diff and squash merge. Keep the template private.
