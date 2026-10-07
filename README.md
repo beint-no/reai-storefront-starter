@@ -1,55 +1,27 @@
-# ReAI storefront starter
+# ReAI storefront provisioning template
 
-A public starting point for a Cloudflare Worker storefront backed by the ReAI Site API. It includes a home page, an index of all collections, a page for each collection, an all-products page, product pages, a cart, hosted checkout, About, Contact, Shipping, FAQ, Returns, Privacy, and Terms pages. The store name, products, collections, images, and prices come from ReAI at request time; they are not copied into this repository.
+Private operational GitHub template used by the existing ReAI store creator.
+Canonical starter source, examples and detailed documentation live in the
+public [reai-site-examples](https://github.com/beint-no/reai-site-examples) repo.
+This repository is generated from its everyday-store export; do not maintain
+a second design implementation here.
 
-The browser keeps only public variant IDs and quantities in its cart. The Worker creates a checkout session with its server-side Site credential, then sends the shopper to ReAI for customer details, shipping, and payment. ReAI validates current prices and stock again at checkout.
+## Refresh the operational copy
 
-Payment requires an active Adyen ecommerce store for the tenant and a configured ReAI Adyen management API key. A Site can show its catalog and open hosted checkout before those payment prerequisites are ready, but payment will remain unavailable.
+Run `npm run export -- everyday-store /absolute/new/export-directory` in the
+public source repo. Copy that output into a dedicated worktree of this repo,
+regenerate package-lock.json with npm install, run npm run check and a Wrangler
+dry run, review the diff and squash merge. Keep the template private.
 
-## Run locally
+ReAI generates private client repositories from this template, then installs
+the client Worker configuration and deployment workflow. The provisioning
+GitHub App must have access to this private template. Template updates do not
+overwrite existing client repositories.
 
-Requires Node.js 20 or newer.
+Runtime bindings are REAI_API_BASE_URL and server-side REAI_SITE_CREDENTIAL.
+Never commit real credentials. The test Worker name is for local development;
+ReAI supplies the actual deployment identity for a generated client store.
 
-```sh
-npm ci
-cp .dev.vars.example .dev.vars
-```
-
-Edit the ignored `.dev.vars` file:
-
-- `REAI_API_BASE_URL`: the ReAI backend origin, such as `http://localhost:8080` for a local application or `https://app.reai.no` for production.
-- `REAI_SITE_CREDENTIAL`: a Site credential with `site:read`, `commerce:catalog:read`, and `commerce:checkout:create` scopes. Keep it server-side.
-
-Set the Site's preview domain to the storefront hostname before starting checkout. ReAI accepts the checkout return URL only when it matches the Site's active or preview domain. For local HTTP development, use a public HTTPS tunnel and its hostname.
-
-Then run:
-
-```sh
-npm run dev
-```
-
-Wrangler prints the local URL. The Worker requests `GET /site/v1/site` to find the Site name and default market, then `GET /site/v1/commerce/storefront` for the current catalog. Checkout posts to the Worker at `/checkout/start`; the Worker calls `POST /site/v1/commerce/checkout-sessions` and returns only the hosted checkout URL. If catalog requests fail, visitors see a generic unavailable page; credentials are not shown.
-
-## Customize
-
-- Edit `public/styles.css` for colors, typography, and layout.
-- Edit the Norwegian and English copy in `src/store-content.js` for the headline, store story, information pages, public contact email, registered business name, registration number, and business address.
-- Replace `public/storefront-mark.svg` and `public/storefront-hero.avif` with your own brand assets. The included hero is a generated editorial image; it does not depict products sold by the merchant.
-- Edit `src/worker.js` for page structure. Look for `home`, `collectionsPage`, `collectionPage`, and `productPage`. Interface labels are in `src/ui-copy.js` and `public/store.js`.
-- Publish products, collections, images, and prices in ReAI. Catalog changes then appear without rebuilding the Worker.
-
-Before a customer launch, set a real customer-service address and registered business details in `src/store-content.js`. Review the Shipping, Returns, Privacy, and Terms copy in that file against the merchant's actual practices and applicable law. The included copy is an editable starting point; it does not supply merchant-specific delivery promises, a return address, or a complete legal notice. When `contactEmail` is blank, the Contact page tells shoppers to use the address in their order confirmation.
-
-The starter selects the Site's default market and its default locale. Norwegian (`nb`, `nn`, or `no` locales) is supported out of the box, including navigation, cart, and information pages. Other locales currently display English interface copy. Add an explicit market/locale selector before serving a store that needs shoppers to change either one. No merchant name, product data, domain, or Site credential is committed here.
-
-## Deployment boundary
-
-`wrangler.jsonc` uses a clearly marked `test-` Worker name for local experiments. A generated store repository should receive its own Worker identifier and runtime bindings from ReAI's provisioning flow. The Worker expects `REAI_API_BASE_URL` as a runtime variable and `REAI_SITE_CREDENTIAL` as a Worker secret. Do not put the credential in `wrangler.jsonc`, GitHub Actions, or browser code.
-
-The Worker uses no `caches.default`, so the code can also run in Cloudflare Workers for Platforms' untrusted mode. The included Wrangler configuration is for local development and standalone testing; ReAI-managed deployment will be implemented separately.
-
-Run `npm run check` before committing changes.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+Each generated repository is independently usable. Customize src/store-content.js
+and public/styles.css, review merchant details/policies, run npm run check, and
+use the generated repository's approved publishing workflow.

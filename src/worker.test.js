@@ -35,7 +35,7 @@ test("renders Site catalog without exposing the Worker credential", async (conte
   assert.match(html, /Lamp &lt;script&gt;/);
   assert.doesNotMatch(html, /private-token/);
   assert.equal(calls.length, 2);
-  assert.equal(calls[0].headers.authorization, "Bearer private-token");
+  assert.equal(calls[0].headers.get("Authorization"), "Bearer private-token");
   assert.equal(calls[1].url, "https://app.example.test/site/v1/commerce/storefront?market=default&locale=en");
 
   const product = await worker.fetch(new Request("https://store.example/products/lamp"), env);
@@ -84,8 +84,8 @@ test("creates a hosted checkout session without exposing the Site credential", a
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { checkoutUrl: "https://app.example.test/checkout/session/test" });
   assert.equal(calls.length, 2);
-  assert.equal(calls[1].options.headers.authorization, "Bearer private-token");
-  assert.ok(calls[1].options.headers["Idempotency-Key"]);
+  assert.equal(calls[1].options.headers.get("Authorization"), "Bearer private-token");
+  assert.ok(calls[1].options.headers.get("Idempotency-Key"));
   assert.deepEqual(JSON.parse(calls[1].options.body), {
     lines: [{ variantId: "00000000-0000-4000-8000-000000000001", quantity: 2 }],
     returnUrl: "https://store.example/checkout/complete",

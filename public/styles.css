@@ -159,3 +159,7 @@ button.button { border: 0; cursor: pointer; font-family: inherit; }
   .footer-brand { grid-column: 1 / -1; }
   .footer-bottom { flex-direction: column; }
 }
+
+.demo-notice { padding: 12px; text-align: center; background: #ffe3ac; color: #241b12; font-size: .85rem; line-height: 1.5; }
+
+/* Everyday uses the default green, warm neutral and three-column design. */
