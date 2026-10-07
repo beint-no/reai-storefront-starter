@@ -1,3 +1,4 @@
+import { ReaiSiteClient } from "../packages/reai-site-client/client.mjs";
 import { storeContent } from "./store-content.js";
 import { language, ui } from "./ui-copy.js";
 
@@ -44,7 +45,12 @@ function picture(product, className = "") {
   const first = product.images?.[0];
   const src = imageUrl(first?.url);
   if (!src) return `<div class="image-placeholder ${className}" aria-hidden="true"><span>✳</span></div>`;
-  return `<img class="${className}" src="${escapeHtml(src)}" alt="${escapeHtml(first.alt || product.title)}" loading="lazy">`;
+  const dimensions = Number.isFinite(first.width) && Number.isFinite(first.height)
+    ? ` width="${first.width}" height="${first.height}"` : "";
+  const renditions = (first.renditions || []).filter((image) => imageUrl(image.url) && image.width > 0);
+  const responsive = renditions.length
+    ? ` srcset="${renditions.map((image) => `${escapeHtml(imageUrl(image.url))} ${image.width}w`).join(", ")}" sizes="(max-width: 600px) 100vw, 50vw"` : "";
+  return `<img class="${className}" src="${escapeHtml(src)}"${dimensions}${responsive} alt="${escapeHtml(first.alt || product.title)}" loading="lazy">`;
 }
 
 function card(product, store) {
@@ -227,11 +233,8 @@ function informationPage(site, store, slug) {
   return page(site, store, content.title, `<section class="shell editorial-page"><a class="breadcrumb" href="/">${t.backStore}</a><div class="editorial-heading"><span class="eyebrow">${escapeHtml(content.eyebrow)}</span><h1>${escapeHtml(content.title)}</h1><p class="lead">${escapeHtml(content.lead)}</p></div><div class="editorial-body">${sections}${details}${links}</div></section>`);
 }
 
-async function siteApi(baseUrl, credential, path, options = {}) {
-  const response = await fetch(new URL(path, baseUrl), {
-    ...options,
-    headers: { accept: "application/json", authorization: `Bearer ${credential}`, ...options.headers },
-  });
+async function delivery(result) {
+  const { response } = await result;
   if (!response.ok) {
     const error = new Error(`Site API returned ${response.status}`);
     error.status = response.status;
@@ -283,7 +286,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (request.method !== "GET" && request.method !== "HEAD" && request.method !== "POST") return new Response("Method not allowed", { status: 405 });
-    if (["/styles.css", "/store.js", "/storefront-mark.svg", "/storefront-hero.avif"].includes(url.pathname)) return env.ASSETS.fetch(request);
+    if (url.pathname.startsWith("/assets/") || ["/styles.css", "/store.js", "/storefront-mark.svg", "/storefront-hero.avif"].includes(url.pathname)) return env.ASSETS.fetch(request);
     if (request.method === "POST") {
       if (url.pathname !== "/checkout/start") return json({ error: "Method not allowed" }, 405);
       if (request.headers.get("Origin") !== url.origin) return json({ error: "Invalid origin" }, 403);
@@ -298,21 +301,21 @@ export default {
     try {
       const baseUrl = new URL(env.REAI_API_BASE_URL);
       if (!(["http:", "https:"].includes(baseUrl.protocol))) throw new Error("Invalid API URL");
-      const site = await siteApi(baseUrl, env.REAI_SITE_CREDENTIAL, "/site/v1/site");
+      const client = new ReaiSiteClient({ baseUrl: baseUrl.href, token: env.REAI_SITE_CREDENTIAL });
+      const site = await delivery(client.site());
       const market = site.markets?.find((entry) => entry.isDefault) || site.markets?.[0];
       if (!market) throw new Error("No Site market configured");
-      const query = new URLSearchParams({ market: market.handle, locale: market.defaultLocale });
+      const context = { market: market.handle, locale: market.defaultLocale };
       if (url.pathname === "/checkout/start") {
         if (request.method !== "POST") return json({ error: "Method not allowed" }, 405);
         const body = await boundedJson(request);
         const lines = checkoutLines(body);
         if (!lines) return json({ error: "Invalid cart" }, 400);
         try {
-          const session = await siteApi(baseUrl, env.REAI_SITE_CREDENTIAL, `/site/v1/commerce/checkout-sessions?${query}`, {
-            method: "POST",
-            headers: { "content-type": "application/json", "Idempotency-Key": request.headers.get("Idempotency-Key") || crypto.randomUUID() },
-            body: JSON.stringify({ lines, returnUrl: `${url.origin}/checkout/complete` }),
-          });
+          const session = await delivery(client.createCheckoutSession(
+            { lines, returnUrl: `${url.origin}/checkout/complete` }, context,
+            request.headers.get("Idempotency-Key") || crypto.randomUUID(),
+          ));
           return json({ checkoutUrl: session.checkoutUrl });
         } catch (error) {
           if (error.response) {
@@ -322,7 +325,7 @@ export default {
           return json({ error: "Checkout is temporarily unavailable" }, 502);
         }
       }
-      const store = await siteApi(baseUrl, env.REAI_SITE_CREDENTIAL, `/site/v1/commerce/storefront?${query}`);
+      const store = await delivery(client.storefront(context));
 
       if (url.pathname === "/catalog.json") return json({ products: store.products, currency: store.currency, locale: store.locale });
       if (url.pathname === "/") return home(site, store);

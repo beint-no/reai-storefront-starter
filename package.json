@@ -1,12 +1,19 @@
 {
-  "name": "reai-storefront-starter",
+  "name": "private-reai-storefront",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "wrangler dev",
-    "check": "node --check src/worker.js && node --check public/store.js && node --test"
+    "check": "node --check src/worker.js && node --check public/store.js && node --test src/*.test.js",
+    "deploy": "wrangler deploy"
   },
   "devDependencies": {
-    "wrangler": "4.142.0"
+    "wrangler": "4.148.0"
+  },
+  "overrides": {
+    "sharp": "0.35.5"
   }
 }
