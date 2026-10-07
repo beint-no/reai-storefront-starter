@@ -49,11 +49,21 @@ function picture(product, className = "") {
 
 function card(product, store) {
   const href = `/products/${encodeURIComponent(product.handle)}`;
-  return `<a class="product-card" href="${href}">
-    <div class="product-image">${picture(product)}</div>
-    <div class="product-meta"><h3>${escapeHtml(product.title)}</h3><span>${escapeHtml(productPrice(product, store))}</span></div>
-    <span class="text-link">${ui(store.locale).viewProduct} <span aria-hidden="true">↗</span></span>
-  </a>`;
+  const t = ui(store.locale);
+  const variants = product.variants || [];
+  const action = variants.length === 1
+    ? `<form data-add-to-cart>
+        <input type="hidden" name="variantId" value="${escapeHtml(variants[0].id)}">
+        <input type="hidden" name="quantity" value="1">
+        <button class="button" type="submit">${t.addToCart}</button>
+        <p data-add-message role="status"></p>
+      </form>`
+    : variants.length > 1 ? `<a class="button" href="${href}">${t.chooseVariant}</a>` : "";
+  return `<article class="product-card">
+    <a class="product-image" href="${href}" aria-label="${escapeHtml(product.title)}">${picture(product)}</a>
+    <div class="product-meta"><h3><a href="${href}">${escapeHtml(product.title)}</a></h3><span>${escapeHtml(productPrice(product, store))}</span></div>
+    <div class="product-actions"><a class="text-link" href="${href}">${t.viewProduct} <span aria-hidden="true">↗</span></a>${action}</div>
+  </article>`;
 }
 
 function page(site, store, title, body, status = 200) {

@@ -32,23 +32,24 @@ function saveCart(cart) {
 
 try { saveCart(readCart()); } catch { /* The cart will report storage failure when used. */ }
 
-const addForm = document.querySelector("[data-add-to-cart]");
-addForm?.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const variantId = addForm.elements.variantId.value;
-  const quantity = Number(addForm.elements.quantity.value);
-  const message = addForm.querySelector("[data-add-message]");
-  if (!UUID.test(variantId) || !Number.isInteger(quantity) || quantity < 1 || quantity > 20) return;
-  const cart = readCart();
-  const existing = cart.find((item) => item.variantId === variantId);
-  if (existing) existing.quantity = Math.min(existing.quantity + quantity, 20);
-  else cart.push({ variantId, quantity });
-  try {
-    saveCart(cart);
-    message.textContent = TEXT.added;
-  } catch {
-    message.textContent = TEXT.saveError;
-  }
+document.querySelectorAll("[data-add-to-cart]").forEach((addForm) => {
+  addForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const variantId = addForm.elements.variantId.value;
+    const quantity = Number(addForm.elements.quantity.value);
+    const message = addForm.querySelector("[data-add-message]");
+    if (!UUID.test(variantId) || !Number.isInteger(quantity) || quantity < 1 || quantity > 20) return;
+    const cart = readCart();
+    const existing = cart.find((item) => item.variantId === variantId);
+    if (existing) existing.quantity = Math.min(existing.quantity + quantity, 20);
+    else cart.push({ variantId, quantity });
+    try {
+      saveCart(cart);
+      message.textContent = TEXT.added;
+    } catch {
+      message.textContent = TEXT.saveError;
+    }
+  });
 });
 
 const cartRoot = document.querySelector("[data-cart-items]");
