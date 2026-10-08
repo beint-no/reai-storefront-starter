@@ -15,6 +15,11 @@ function escapeHtml(value) {
   })[character]);
 }
 
+function descriptionHtml(item) {
+  if (item.descriptionHtml) return `<div class="rich-description">${item.descriptionHtml}</div>`;
+  return item.description ? `<p class="lead">${escapeHtml(item.description)}</p>` : "";
+}
+
 function imageUrl(value) {
   try {
     const url = new URL(value);
@@ -168,7 +173,7 @@ function collectionPage(site, store, collection) {
   const products = (store.products || []).filter((product) => included.has(product.id));
   return page(site, store, collection.title, `<section class="shell inner-page">
     <a class="breadcrumb" href="/collections">← ${t.collections}</a><span class="eyebrow">${t.collection}</span>
-    <h1>${escapeHtml(collection.title)}</h1>${collection.description ? `<p class="lead">${escapeHtml(collection.description)}</p>` : ""}
+    <h1>${escapeHtml(collection.title)}</h1>${descriptionHtml(collection)}
     ${products.length ? `<div class="product-grid">${products.map((product) => card(product, store)).join("")}</div>` : `<p class="empty-state">${t.noCollectionProducts}</p>`}
   </section>`);
 }
@@ -187,7 +192,7 @@ function productPage(site, store, product) {
     <div class="product-detail"><div class="detail-image">${picture(product)}</div>
       <div class="detail-copy"><span class="eyebrow">${escapeHtml(product.brand || site.name)}</span>
         <h1>${escapeHtml(product.title)}</h1><p class="detail-price">${escapeHtml(productPrice(product, store))}</p>
-        ${product.description ? `<p class="lead">${escapeHtml(product.description)}</p>` : ""}
+        ${descriptionHtml(product)}
         ${options ? `<form data-add-to-cart><label for="variant">${t.options}</label><select id="variant" name="variantId" required${soldOut ? " disabled" : ""}>${options}</select>
           <label for="quantity">${t.quantity}</label><input id="quantity" name="quantity" type="number" min="1" max="20" value="1" required>
           <button class="button" type="submit"${soldOut ? " disabled" : ""}>${soldOut ? t.outOfStock : t.addToCart}</button><p data-add-message role="status"></p></form>` : ""}
