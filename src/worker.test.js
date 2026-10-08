@@ -24,7 +24,7 @@ test("renders Site catalog without exposing the Worker credential", async (conte
   const calls = [];
   context.mock.method(globalThis, "fetch", async (input, options) => {
     calls.push({ url: String(input), headers: options.headers });
-    return Response.json(String(input).endsWith("/site/v1/site") ? site : store);
+    return Response.json(String(input).endsWith("/site/v1/site") ? site : String(input).includes("/commerce/availability?") ? { variants: [{ variantId: store.products[0].variants[0].id, status: "AVAILABLE" }] } : store);
   });
   const env = { REAI_API_BASE_URL: "https://app.example.test", REAI_SITE_CREDENTIAL: "private-token" };
   const response = await worker.fetch(new Request("https://store.example/"), env);
@@ -34,7 +34,7 @@ test("renders Site catalog without exposing the Worker credential", async (conte
   assert.match(html, /Sample &lt;Shop&gt;/);
   assert.match(html, /Lamp &lt;script&gt;/);
   assert.doesNotMatch(html, /private-token/);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.equal(calls[0].headers.get("Authorization"), "Bearer private-token");
   assert.equal(calls[1].url, "https://app.example.test/site/v1/commerce/storefront?market=default&locale=en");
 
@@ -51,7 +51,7 @@ test("shows setup page without making an upstream request when configuration is 
 });
 
 test("renders editable information pages and linked footer without exposing credentials", async (context) => {
-  context.mock.method(globalThis, "fetch", async (input) => Response.json(String(input).endsWith("/site/v1/site") ? site : store));
+  context.mock.method(globalThis, "fetch", async (input) => Response.json(String(input).endsWith("/site/v1/site") ? site : String(input).includes("/commerce/availability?") ? { variants: [{ variantId: store.products[0].variants[0].id, status: "AVAILABLE" }] } : store));
   const env = { REAI_API_BASE_URL: "https://app.example.test", REAI_SITE_CREDENTIAL: "private-token" };
   for (const path of ["/pages/about", "/pages/contact", "/pages/shipping", "/pages/faq", "/policies/returns", "/policies/privacy", "/policies/terms"]) {
     const response = await worker.fetch(new Request(`https://store.example${path}`), env);

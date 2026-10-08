@@ -61,10 +61,10 @@ function card(product, store) {
     ? `<form data-add-to-cart>
         <input type="hidden" name="variantId" value="${escapeHtml(variants[0].id)}">
         <input type="hidden" name="quantity" value="1">
-        <button class="button" type="submit">${t.addToCart}</button>
+        <button class="button" type="submit"${variants[0].outOfStock ? " disabled" : ""}>${variants[0].outOfStock ? t.outOfStock : t.addToCart}</button>
         <p data-add-message role="status"></p>
       </form>`
-    : variants.length > 1 ? `<a class="button" href="${href}">${t.chooseVariant}</a>` : "";
+    : variants.length > 1 ? (variants.every((variant) => variant.outOfStock) ? `<button class="button" disabled>${t.outOfStock}</button>` : `<a class="button" href="${href}">${t.chooseVariant}</a>`) : "";
   return `<article class="product-card">
     <a class="product-image" href="${href}" aria-label="${escapeHtml(product.title)}">${picture(product)}</a>
     <div class="product-meta"><h3><a href="${href}">${escapeHtml(product.title)}</a></h3><span>${escapeHtml(productPrice(product, store))}</span></div>
@@ -175,9 +175,12 @@ function collectionPage(site, store, collection) {
 
 function productPage(site, store, product) {
   const t = ui(store.locale);
-  const options = (product.variants || []).map((variant) => {
+  const variants = product.variants || [];
+  const soldOut = variants.every((variant) => variant.outOfStock);
+  const selected = variants.find((variant) => !variant.outOfStock) || variants[0];
+  const options = variants.map((variant) => {
     const label = variant.options?.map((option) => `${option.name}: ${option.value}`).join(" · ") || t.standard;
-    return `<option value="${escapeHtml(variant.id)}">${escapeHtml(label)} · ${escapeHtml(price(variant.price, store.currency, store.locale))}</option>`;
+    return `<option value="${escapeHtml(variant.id)}" data-out-of-stock="${Boolean(variant.outOfStock)}"${variant.id === selected?.id ? " selected" : ""}${variant.outOfStock ? " disabled" : ""}>${escapeHtml(label)} · ${escapeHtml(price(variant.price, store.currency, store.locale))}${variant.outOfStock ? ` · ${t.outOfStock}` : ""}</option>`;
   }).join("");
   return page(site, store, product.title, `<section class="shell inner-page">
     <a class="breadcrumb" href="/collections/all">${t.backAllProducts}</a>
@@ -185,9 +188,9 @@ function productPage(site, store, product) {
       <div class="detail-copy"><span class="eyebrow">${escapeHtml(product.brand || site.name)}</span>
         <h1>${escapeHtml(product.title)}</h1><p class="detail-price">${escapeHtml(productPrice(product, store))}</p>
         ${product.description ? `<p class="lead">${escapeHtml(product.description)}</p>` : ""}
-        ${options ? `<form data-add-to-cart><label for="variant">${t.options}</label><select id="variant" name="variantId" required>${options}</select>
+        ${options ? `<form data-add-to-cart><label for="variant">${t.options}</label><select id="variant" name="variantId" required${soldOut ? " disabled" : ""}>${options}</select>
           <label for="quantity">${t.quantity}</label><input id="quantity" name="quantity" type="number" min="1" max="20" value="1" required>
-          <button class="button" type="submit">${t.addToCart}</button><p data-add-message role="status"></p></form>` : ""}
+          <button class="button" type="submit"${soldOut ? " disabled" : ""}>${soldOut ? t.outOfStock : t.addToCart}</button><p data-add-message role="status"></p></form>` : ""}
       </div>
     </div>
   </section>`);
@@ -326,6 +329,20 @@ export default {
         }
       }
       const store = await delivery(client.storefront(context));
+
+      if (["/", "/catalog.json"].includes(url.pathname) || /^\/(collections|products)(\/|$)/.test(url.pathname)) {
+        const stockProducts = url.pathname.startsWith("/products/")
+          ? store.products.filter((product) => product.handle === routeHandle(url.pathname, "products")) : store.products;
+        const ids = (stockProducts || []).flatMap((product) => (product.variants || []).map((variant) => variant.id));
+        const availability = new Map();
+        for (let start = 0; start < ids.length; start += 100) {
+          const batch = await delivery(client.availabilities(ids.slice(start, start + 100), context));
+          batch.variants.forEach((variant) => availability.set(variant.variantId, variant.status));
+        }
+        stockProducts.forEach((product) => product.variants.forEach((variant) => {
+          variant.outOfStock = availability.get(variant.id) === "OUT_OF_STOCK";
+        }));
+      }
 
       if (url.pathname === "/catalog.json") return json({ products: store.products, currency: store.currency, locale: store.locale });
       if (url.pathname === "/") return home(site, store);
