@@ -2,12 +2,12 @@ const CART_KEY = "reai-storefront-cart-v1";
 const CHECKOUT_KEY = "reai-storefront-checkout-started";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const TEXT = /^(?:nb|nn|no)(?:-|$)/i.test(document.documentElement.lang) ? {
-  added: "Lagt i handlekurven.", saveError: "Nettleseren kunne ikke lagre handlekurven.", empty: "Handlekurven er tom.",
+  outOfStock: "Utsolgt", stockLimit: (count) => `Bare ${count} kan kjøpes. Reduser antallet.`, added: "Lagt i handlekurven.", saveError: "Nettleseren kunne ikke lagre handlekurven.", empty: "Handlekurven er tom.",
   unavailableProduct: "Utilgjengelig produkt", removeToContinue: "Fjern produktet for å fortsette", quantity: "Antall for",
   remove: "Fjern", estimatedTotal: "Estimert totalsum", cartUnavailable: "Handlekurven er midlertidig utilgjengelig. Prøv igjen.",
   openingCheckout: "Åpner kassen…", checkout: "Gå til kassen", checkoutError: "Kunne ikke starte betalingen.",
 } : {
-  added: "Added to cart.", saveError: "Your browser could not save the cart.", empty: "Your cart is empty.",
+  outOfStock: "Out of stock", stockLimit: (count) => `Only ${count} can be purchased. Reduce the quantity.`, added: "Added to cart.", saveError: "Your browser could not save the cart.", empty: "Your cart is empty.",
   unavailableProduct: "Unavailable product", removeToContinue: "Remove this item to continue", quantity: "Quantity for",
   remove: "Remove", estimatedTotal: "Estimated total", cartUnavailable: "The cart is temporarily unavailable. Please try again.",
   openingCheckout: "Opening checkout…", checkout: "Continue to checkout", checkoutError: "Checkout could not be started.",
@@ -35,6 +35,8 @@ try { saveCart(readCart()); } catch { /* The cart will report storage failure wh
 document.querySelectorAll("[data-add-to-cart]").forEach((addForm) => {
   addForm.addEventListener("submit", (event) => {
     event.preventDefault();
+    const selected = addForm.elements.variantId.selectedOptions?.[0];
+    if (addForm.querySelector('button[type="submit"]').disabled || selected?.dataset.outOfStock === "true") return;
     const variantId = addForm.elements.variantId.value;
     const quantity = Number(addForm.elements.quantity.value);
     const message = addForm.querySelector("[data-add-message]");
@@ -58,6 +60,7 @@ if (cartRoot) {
   const checkoutError = document.querySelector("[data-checkout-error]");
   const cartTotal = document.querySelector("[data-cart-total]");
   let catalog = null;
+  let stockIssues = new Map();
 
   function render() {
     const cart = readCart();
@@ -95,6 +98,8 @@ if (cartRoot) {
         if (Number.isInteger(next) && next >= 1 && next <= 20) {
           item.quantity = next;
           saveCart(cart);
+          stockIssues.clear();
+          checkoutError.hidden = true;
         }
         render();
       });
@@ -103,13 +108,24 @@ if (cartRoot) {
       remove.textContent = TEXT.remove;
       remove.addEventListener("click", () => {
         saveCart(cart.filter((entry) => entry.variantId !== item.variantId));
+        stockIssues.clear();
+        checkoutError.hidden = true;
         render();
       });
       row.append(title, detail, quantity, remove);
+      const issue = stockIssues.get(item.variantId);
+      if (found?.variant.outOfStock || issue) {
+        const warning = document.createElement("p");
+        warning.className = "cart-stock-error";
+        warning.setAttribute("role", "status");
+        warning.textContent = found?.variant.outOfStock || issue?.maximumQuantity === 0
+          ? TEXT.outOfStock : TEXT.stockLimit(issue.maximumQuantity);
+        row.append(warning);
+      }
       cartRoot.append(row);
       if (found) total += Number(found.variant.price) * item.quantity;
     }
-    checkoutButton.disabled = cart.some((item) => !variants.has(item.variantId));
+    checkoutButton.disabled = cart.some((item) => !variants.has(item.variantId) || variants.get(item.variantId).variant.outOfStock || stockIssues.has(item.variantId));
     cartTotal.textContent = `${TEXT.estimatedTotal}: ${new Intl.NumberFormat(catalog.locale, { style: "currency", currency: catalog.currency }).format(total)}`;
   }
 
@@ -135,7 +151,10 @@ if (cartRoot) {
         body: JSON.stringify({ lines: readCart() }),
       });
       const result = await response.json();
-      if (!response.ok || !result.checkoutUrl) throw new Error(result.detail || result.error || TEXT.checkoutError);
+      if (!response.ok || !result.checkoutUrl) {
+        stockIssues = new Map((result.stockIssues || []).map((issue) => [issue.variantId, issue]));
+        throw new Error(result.detail || result.error || TEXT.checkoutError);
+      }
       sessionStorage.setItem(CHECKOUT_KEY, "1");
       location.assign(result.checkoutUrl);
     } catch (error) {
