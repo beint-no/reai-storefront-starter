@@ -1,3 +1,9 @@
+import {
+  quantityControl,
+  undoControl,
+  rememberCartFocus,
+  restoreCartFocus,
+} from "./assets/cart-controls.js";
 const CART_KEY = "reai-storefront-cart-v1";
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -205,7 +211,8 @@ const cartTotal = document.querySelector("[data-cart-total]");
 let catalog,
   stockIssues = new Map(),
   loading,
-  starting = false;
+  starting = false,
+  removed = null;
 function report(message) {
   checkoutError.textContent = message;
   checkoutError.hidden = false;
@@ -228,7 +235,22 @@ function renderCart() {
       p.variants.map((v) => [v.id, { product: p, variant: v }]),
     ),
   );
+  const focus = rememberCartFocus(cartRoot);
   cartRoot.replaceChildren();
+  if (removed)
+    cartRoot.append(
+      undoControl(
+        removed.label,
+        () => {
+          const rows = readCart();
+          if (!rows.some((x) => x.variantId === removed.item.variantId))
+            rows.splice(removed.index, 0, removed.item);
+          removed = null;
+          mutate(rows);
+        },
+        nb,
+      ),
+    );
   if (!cart.length) {
     const empty = document.createElement("p");
     empty.className = "empty-state";
@@ -236,6 +258,7 @@ function renderCart() {
     cartRoot.append(empty);
     checkoutButton.disabled = true;
     cartTotal.textContent = "";
+    restoreCartFocus(cartRoot, focus);
     return;
   }
   let total = 0;
@@ -266,29 +289,33 @@ function renderCart() {
     detail.textContent = found
       ? money(Number(found.variant.price) * item.quantity, catalog)
       : text.removeToContinue;
-    const quantity = document.createElement("input");
-    quantity.type = "number";
-    quantity.min = "1";
-    quantity.max = "20";
-    quantity.value = String(item.quantity);
-    quantity.setAttribute(
-      "aria-label",
-      `${text.quantity} ${title.textContent}`,
+    function removeLine() {
+      removed = {
+        item: { ...item },
+        label: title.textContent,
+        index: cart.indexOf(item),
+      };
+      mutate(cart.filter((i) => i.variantId !== item.variantId));
+    }
+    const quantity = quantityControl(
+      item.quantity,
+      title.textContent,
+      item.variantId,
+      (next) => {
+        if (next === 0) removeLine();
+        else {
+          item.quantity = next;
+          mutate(cart);
+        }
+      },
+      nb,
     );
-    quantity.addEventListener("change", () => {
-      const next = Number(quantity.value);
-      if (Number.isInteger(next) && next >= 1 && next <= 20) {
-        item.quantity = next;
-        mutate(cart);
-      } else renderCart();
-    });
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = text.remove;
     remove.setAttribute("aria-label", `${text.remove} ${title.textContent}`);
-    remove.addEventListener("click", () =>
-      mutate(cart.filter((i) => i.variantId !== item.variantId)),
-    );
+    remove.dataset.cartFocus = item.variantId + ":remove";
+    remove.addEventListener("click", removeLine);
     row.append(name, detail, quantity, remove);
     const issue = stockIssues.get(item.variantId);
     if (found?.variant.outOfStock || issue) {
@@ -313,6 +340,7 @@ function renderCart() {
         stockIssues.has(i.variantId),
     );
   cartTotal.textContent = `${text.total}: ${money(total, catalog)}`;
+  restoreCartFocus(cartRoot, focus);
 }
 async function loadCart() {
   if (!cartRoot || loading) return loading;

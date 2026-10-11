@@ -6,14 +6,20 @@ import {
 } from "./catalog-filter-data.js";
 const root = document.querySelector("[data-catalog]");
 if (root) {
-  const { products, facets, currency, locale } = JSON.parse(
+  const {
+    products,
+    facets,
+    currency,
+    locale,
+    availability: fixtureStock,
+  } = JSON.parse(
     root.querySelector("[data-catalog-model]").dataset.catalogModel,
   );
   const nb = locale === "nb",
     grid = root.querySelector(".product-grid"),
     cards = grid ? [...grid.children] : [];
   const byId = new Map(products.map((p) => [p.id, p])),
-    statuses = new Map();
+    statuses = new Map(fixtureStock || []);
   const originalPrices = new Map(
     cards.map((c) => [c, c.querySelector("[data-product-price]").innerHTML]),
   );
@@ -44,18 +50,103 @@ if (root) {
   }));
   let state = readFilterState(new URL(location.href).searchParams, facets),
     stockPromise,
-    stockReady = false;
+    stockReady = !!fixtureStock;
   const panel = root.querySelector("[data-catalog-panel]");
-  if (matchMedia("(max-width: 700px)").matches) panel.open = false;
+  const mobile = matchMedia("(max-width: 700px)");
+  const body = root.querySelector("[data-filter-body]");
+  let draft = null,
+    dialogOpener;
+  // The same controls are moved into a native modal on mobile, not duplicated.
+  const mobileDialog = document.createElement("dialog");
+  mobileDialog.className = "catalog-mobile-dialog";
+  mobileDialog.setAttribute(
+    "aria-label",
+    nb ? "Filtrer produkter" : "Filter products",
+  );
+  document.body.append(mobileDialog);
+  if (mobile.matches) panel.open = false;
+  panel.querySelector("summary").addEventListener("click", (event) => {
+    if (!mobile.matches) return;
+    event.preventDefault();
+    dialogOpener = event.currentTarget;
+    draft = structuredClone(state);
+    controls();
+    mobileDialog.append(body);
+    mobileDialog.showModal();
+    previewDraft();
+  });
+  function closeFilters() {
+    draft = null;
+    panel.append(body);
+    controls();
+    mobileDialog.close();
+  }
+  mobileDialog.addEventListener("close", () => {
+    draft = null;
+    panel.append(body);
+    controls();
+    render();
+    dialogOpener?.focus();
+  });
+  body
+    .querySelector("[data-filter-cancel]")
+    .addEventListener("click", closeFilters);
+  body
+    .querySelector("[data-filter-apply]")
+    .addEventListener("click", async () => {
+      if (draft.min != null && draft.max != null && draft.min > draft.max) {
+        body.querySelector("[data-price-error]").hidden = false;
+        min.focus();
+        return;
+      }
+      state = draft;
+      closeFilters();
+      await update("push");
+    });
+  mobile.addEventListener("change", () => {
+    if (mobileDialog.open) closeFilters();
+    panel.open = !mobile.matches;
+  });
+  function previewDraft() {
+    const filtered =
+      draft.available && !stockReady ? { ...draft, available: false } : draft;
+    const count = products.filter(
+      (p) => matchingVariants(p, filtered, statuses).length,
+    ).length;
+    const counts = facetCounts(products, facets, filtered, statuses);
+    for (const check of checks) {
+      const count = counts.get(check.dataset.facetKey)?.get(check.value) || 0;
+      check.disabled = !check.checked && count === 0;
+      check.closest("label").querySelector("[data-facet-count]").textContent =
+        String(count);
+    }
+    body.querySelector("[data-filter-preview]").textContent =
+      draft.available && !stockReady
+        ? nb
+          ? "Lager kontrolleres når du viser produktene."
+          : "Availability is checked when you show products."
+        : `${count} ${nb ? "produkter" : "products"}`;
+    const invalid =
+      draft.min != null && draft.max != null && draft.min > draft.max;
+    body.querySelector("[data-price-error]").hidden = !invalid;
+    min.setAttribute("aria-invalid", String(invalid));
+    max.setAttribute("aria-invalid", String(invalid));
+  }
+  function changeState(change, mode) {
+    change(draft || state);
+    if (draft) previewDraft();
+    else update(mode);
+  }
 
   function controls() {
+    const current = draft || state;
     search.value = state.query;
-    min.value = state.min ?? "";
-    max.value = state.max ?? "";
-    available.checked = state.available;
+    min.value = current.min ?? "";
+    max.value = current.max ?? "";
+    available.checked = current.available;
     sort.value = state.sort;
     for (const check of checks)
-      check.checked = state.selected[check.dataset.facetKey]?.includes(
+      check.checked = current.selected[check.dataset.facetKey]?.includes(
         check.value,
       );
     for (const button of root.querySelectorAll("[data-catalog-view]"))
@@ -189,16 +280,17 @@ if (root) {
         }
       }
       // Keep links on the matching variant without bypassing normal product-page availability checks.
+      const preferred =
+        constrained && variants.length
+          ? variants.reduce((a, b) =>
+              Number(a.price) <= Number(b.price) ? a : b,
+            )
+          : null;
+      card.dataset.catalogVariant = preferred?.id || "";
       for (const link of card.querySelectorAll('a[href*="/products/"]')) {
         const target = new URL(link.href);
         target.searchParams.delete("variant");
-        if (constrained && variants.length)
-          target.searchParams.set(
-            "variant",
-            variants.reduce((a, b) =>
-              Number(a.price) <= Number(b.price) ? a : b,
-            ).id,
-          );
+        if (preferred) target.searchParams.set("variant", preferred.id);
         link.href = target.pathname + target.search;
       }
     }
@@ -206,6 +298,14 @@ if (root) {
       ? `${count} av ${products.length} produkter`
       : `${count} of ${products.length} products`;
     root.querySelector("[data-catalog-empty]").hidden = count > 0;
+    root.querySelector("[data-catalog-recovery]").hidden = count > 0;
+    root.querySelector("[data-clear-search]").hidden = !state.query;
+    root.querySelector("[data-clear-filters]").hidden = !(
+      state.min != null ||
+      state.max != null ||
+      state.available ||
+      Object.values(state.selected).some((v) => v.length)
+    );
     const counts = facetCounts(products, facets, state, statuses);
     for (const check of checks) {
       const count = counts.get(check.dataset.facetKey)?.get(check.value) || 0;
@@ -232,6 +332,7 @@ if (root) {
       grid.classList.toggle("list-view", state.view === "list");
     }
     chips();
+    root.dispatchEvent(new Event("reai:catalog-render", { bubbles: true }));
   }
   async function loadStock() {
     if (stockReady) return;
@@ -289,30 +390,49 @@ if (root) {
     state.query = search.value;
     update("replace");
   });
-  for (const input of [min, max])
-    input.addEventListener("input", () => {
-      state[input === min ? "min" : "max"] =
-        input.value &&
-        Number(input.value) >= 0 &&
-        Number.isFinite(Number(input.value))
-          ? Number(input.value)
-          : null;
-      update("replace");
-    });
-  checks.forEach((check) =>
-    check.addEventListener("change", () => {
-      state.selected[check.dataset.facetKey] = checks
-        .filter(
-          (c) => c.dataset.facetKey === check.dataset.facetKey && c.checked,
-        )
-        .map((c) => c.value);
+  root
+    .querySelector(".catalog-search-form")
+    .addEventListener("submit", (event) => {
+      event.preventDefault();
+      state.query = search.value;
       update("push");
-    }),
+    });
+  root.querySelector("[data-clear-search]").addEventListener("click", () => {
+    state.query = "";
+    update("push");
+    search.focus();
+  });
+  root.querySelector("[data-clear-filters]").addEventListener("click", () => {
+    state = { ...state, min: null, max: null, available: false, selected: {} };
+    update("push");
+  });
+  for (const input of [min, max])
+    input.addEventListener("input", () =>
+      changeState((current) => {
+        current[input === min ? "min" : "max"] =
+          input.value &&
+          Number(input.value) >= 0 &&
+          Number.isFinite(Number(input.value))
+            ? Number(input.value)
+            : null;
+      }, "replace"),
+    );
+  checks.forEach((check) =>
+    check.addEventListener("change", () =>
+      changeState((current) => {
+        current.selected[check.dataset.facetKey] = checks
+          .filter(
+            (c) => c.dataset.facetKey === check.dataset.facetKey && c.checked,
+          )
+          .map((c) => c.value);
+      }, "push"),
+    ),
   );
   available.addEventListener("change", () => {
-    state.available = available.checked;
-    root.querySelector("[data-stock-note]").textContent = "";
-    update("push");
+    body.querySelector("[data-stock-note]").textContent = "";
+    changeState((current) => {
+      current.available = available.checked;
+    }, "push");
   });
   sort.addEventListener("change", () => {
     state.sort = sort.value;
@@ -325,6 +445,7 @@ if (root) {
     }),
   );
   addEventListener("popstate", () => {
+    if (mobileDialog.open) closeFilters();
     state = readFilterState(new URL(location.href).searchParams, facets);
     update("replace");
   });

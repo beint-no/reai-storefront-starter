@@ -62,7 +62,12 @@ export function catalogFacets(products, locale = "nb") {
         );
     for (const variant of product.variants)
       for (const option of variant.options || [])
-        add(`option:${option.name}`, option.name, option.value, option.value);
+        add(
+          `option:${option.name}`,
+          nb && option.name === "Size" ? "Størrelse" : option.name,
+          option.value,
+          option.value,
+        );
   }
   return (
     [...groups.values()]
