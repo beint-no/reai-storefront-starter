@@ -200,7 +200,7 @@ function page(site, store, title, body, status = 200) {
     <div><h2>${t.about}</h2><a href="/pages/about">${t.ourStory}</a>${contact}<a href="/policies/privacy">${t.privacy}</a><a href="/policies/terms">${t.terms}</a></div>
   </div><div class="shell footer-bottom"><span>© ${new Date().getUTCFullYear()} ${escapeHtml(legalName)}${config.organizationNumber ? ` · ${escapeHtml(config.organizationNumber)}` : ""}</span><span>${t.poweredBy} <a href="https://reai.no" rel="external">ReAI</a></span></div></footer>
   ${site && store.pagePath !== "/cart" ? `<dialog class="cart-drawer" data-cart-dialog aria-labelledby="cart-drawer-title"><div class="drawer-heading"><h2 id="cart-drawer-title">${t.yourCart}</h2><button type="button" data-close-cart aria-label="${t.close}">×</button></div>${cartContents(store)}<a class="text-link" href="/cart">${t.viewCart} ↗</a></dialog>` : ""}
-  <script src="/store.js" defer></script>
+  <script src="/store.js" type="module"></script>
   <script src="/assets/catalog-filters.js" type="module"></script>
 </body>
 </html>`;
@@ -306,7 +306,7 @@ function catalogGrid(products, store) {
   const locale = language(store.locale);
   if (!products.length)
     return `<p class="empty-state">${ui(store.locale).emptyProducts}</p>`;
-  return `<div class="catalog-layout" data-catalog><aside>${renderCatalogFilters(products, store, locale, { explain: false })}</aside><div>${renderCatalogTools(products, locale)}<div class="product-grid">${products.map((product) => card(product, store)).join("")}</div><p class="empty-state" data-catalog-empty hidden>${ui(store.locale).noMatches}</p></div></div>`;
+  return `<div class="catalog-layout" data-catalog><aside>${renderCatalogFilters(products, store, locale, { explain: false })}</aside><div>${renderCatalogTools(products, locale)}<div class="product-grid">${products.map((product) => card(product, store)).join("")}</div><p data-catalog-empty hidden></p></div></div>`;
 }
 
 function productPage(site, store, product, requestedVariant) {

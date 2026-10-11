@@ -708,4 +708,201 @@ button.button { border: 0; cursor: pointer; font-family: inherit; }
   }
 }
 
+/* Research-informed controls shared with the standalone export. */
+.catalog-search-form {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+}
+.catalog-search-form .search {
+  min-width: 0;
+}
+.catalog-search-form button,
+.catalog-recovery button {
+  padding: 10px 14px;
+  min-height: 44px;
+  border: 1px solid #a4b2ab;
+  background: #fff;
+  color: #171b19;
+  cursor: pointer;
+}
+.catalog-recovery {
+  padding: 20px;
+  border: 1px solid #cad1cb;
+  margin-bottom: 20px;
+}
+.catalog-recovery[hidden],
+[data-catalog-empty][hidden] {
+  display: none;
+}
+.catalog-mobile-heading,
+.catalog-filter-actions {
+  display: none;
+}
+.catalog-mobile-dialog {
+  width: min(100%, 480px);
+  max-height: 100dvh;
+  height: 100dvh;
+  max-width: 100%;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  color: #171b19;
+  background: #fff;
+}
+.catalog-mobile-dialog::backdrop {
+  background: #0006;
+}
+.catalog-mobile-dialog .catalog-filter-body {
+  padding: 0 20px;
+}
+.catalog-mobile-dialog .catalog-mobile-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  padding: 18px 0;
+  z-index: 2;
+  border-bottom: 1px solid #cad1cb;
+}
+.catalog-mobile-dialog fieldset {
+  border: 0;
+  padding: 12px 0;
+  margin: 0;
+}
+.catalog-mobile-dialog .catalog-price > div {
+  display: flex;
+  gap: 12px;
+}
+.catalog-mobile-dialog label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.catalog-mobile-dialog .catalog-price label {
+  flex: 1;
+  min-width: 0;
+  display: block;
+}
+.catalog-mobile-dialog input[type="number"] {
+  width: 100%;
+  min-height: 44px;
+  font-size: 16px;
+  border: 1px solid #a4b2ab;
+  padding: 10px;
+}
+.catalog-mobile-dialog summary {
+  padding: 16px 0;
+  cursor: pointer;
+}
+.catalog-mobile-dialog summary span:last-child {
+  float: right;
+}
+.catalog-mobile-dialog small {
+  margin-left: auto;
+}
+.catalog-mobile-dialog .catalog-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  padding: 16px 0;
+  border-top: 1px solid #cad1cb;
+}
+.catalog-mobile-dialog button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid #a4b2ab;
+  background: white;
+  color: #171b19;
+  cursor: pointer;
+}
+.catalog-mobile-dialog [data-filter-apply] {
+  flex: 1;
+  background: #173f34;
+  color: #fff;
+}
+.catalog-mobile-dialog .catalog-swatch {
+  width: 20px;
+  height: 20px;
+}
+.catalog-mobile-dialog .catalog-stock-note {
+  display: block;
+}
+.catalog-mobile-dialog [hidden] {
+  display: none;
+}
+@media (max-width: 700px) {
+  .catalog-search-form {
+    width: 100%;
+  }
+  .catalog-search-form .search {
+    flex: 1;
+  }
+  .catalog-search-form input {
+    width: 100%;
+  }
+  .index-toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+.cart-quantity-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cart-quantity-control input {
+  width: 48px !important;
+  text-align: center;
+  min-height: 44px;
+  padding: 4px !important;
+  font-size: 16px;
+}
+.cart-quantity-control button {
+  width: 44px;
+  min-height: 44px;
+  border: 1px solid #a4b2ab !important;
+  background: white !important;
+  text-decoration: none !important;
+  color: #17241d !important;
+  padding: 0 !important;
+  font-size: 20px;
+}
+.cart-quantity-control button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.cart-undo {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 0;
+  font-size: 13px;
+}
+.cart-undo button {
+  border: 0;
+  padding: 10px;
+  min-height: 44px;
+  background: white;
+  color: #174638;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.cart-row {
+  grid-template-columns: minmax(100px, 1fr) auto auto auto;
+}
+@media (max-width: 700px) {
+  .cart-row {
+    grid-template-columns: 1fr auto;
+  }
+}
+
 /* Everyday uses the default green, warm neutral and three-column design. */

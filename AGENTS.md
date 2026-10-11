@@ -35,6 +35,9 @@ variant prices and stock, image galleries, a cart drawer and full cart page,
 hosted checkout, newsletter consent, language/market selection and information
 pages. ReAI owns catalog data; store-content.js owns approved business copy.
 A checkout return alone never proves payment and does not clear the cart.
+Mobile filters keep a draft until Apply; Cancel/Escape discard it. Cart quantities
+update automatically, including removal at zero and undo of the last removed line.
+Demo lessons, fashion fixtures and checkout simulations are not part of this template.
 
 Newsletter signup is enabled by default and records explicit consent. Welcome
 emails require a configured ReAI flow. stockNotificationsEnabled defaults to
