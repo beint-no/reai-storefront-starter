@@ -315,6 +315,28 @@ button.button { border: 0; cursor: pointer; font-family: inherit; }
   overflow: hidden;
   clip-path: inset(50%);
 }
+.stock-signup {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #d3dad2;
+}
+.stock-signup > label {
+  display: block;
+  margin: 1rem 0;
+}
+.stock-signup input[type="email"],
+.stock-signup select {
+  display: block;
+  width: 100%;
+  max-width: none;
+  margin-top: 0.5rem;
+}
+.stock-signup .newsletter-consent {
+  display: flex;
+}
+.stock-signup input[type="checkbox"] {
+  min-height: 0;
+}
 [data-newsletter-status] {
   min-height: 1.4rem;
   margin: 1rem 0 0;
