@@ -904,5 +904,7 @@ button.button { border: 0; cursor: pointer; font-family: inherit; }
     grid-template-columns: 1fr auto;
   }
 }
+.product-navigation {display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;margin-bottom:24px}
+.product-card[id] {scroll-margin-top:100px}
 
 /* Everyday uses the default green, warm neutral and three-column design. */

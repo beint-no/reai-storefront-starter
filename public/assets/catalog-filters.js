@@ -1,3 +1,4 @@
+import { catalogReturn } from "./catalog-context.js";
 import {
   matchingVariants,
   facetCounts,
@@ -39,7 +40,7 @@ if (root) {
       minimumFractionDigits: 0,
     }).format(value);
   const languageLinks = [
-    ...document.querySelectorAll('a[href*="?lang="], a[data-language-link]'),
+    ...document.querySelectorAll('a.language, a[data-language-link]'),
   ].map((link) => ({
     link,
     key: link.hasAttribute("data-language-link") ? "locale" : "lang",
@@ -248,6 +249,7 @@ if (root) {
       if (!card.hidden) count++;
       const price = card.querySelector("[data-product-price]");
       const constrained =
+        !!state.query ||
         state.min != null ||
         state.max != null ||
         state.available ||
@@ -287,10 +289,15 @@ if (root) {
             )
           : null;
       card.dataset.catalogVariant = preferred?.id || "";
+      card.id = "product-" + card.dataset.productId;
+      const back = new URL(location.href);
+      back.hash = card.id;
+      const returnPath = catalogReturn(back.pathname + back.search + back.hash);
       for (const link of card.querySelectorAll('a[href*="/products/"]')) {
         const target = new URL(link.href);
         target.searchParams.delete("variant");
         if (preferred) target.searchParams.set("variant", preferred.id);
+        if (returnPath) target.searchParams.set("return", returnPath);
         link.href = target.pathname + target.search;
       }
     }
