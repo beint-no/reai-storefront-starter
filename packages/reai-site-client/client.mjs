@@ -22,6 +22,8 @@ const STOREFRONT_PATH = "/site/v1/commerce/storefront";
 /** @type {keyof SiteApiPaths} */
 const CATALOG_PATH = "/site/v1/commerce/catalog";
 /** @type {keyof SiteApiPaths} */
+const PRODUCTS_PATH = "/site/v1/commerce/products";
+/** @type {keyof SiteApiPaths} */
 const PRODUCT_PATH = "/site/v1/commerce/products/{handle}";
 /** @type {keyof SiteApiPaths} */
 const COLLECTIONS_PATH = "/site/v1/commerce/collections";
@@ -34,13 +36,19 @@ const AVAILABILITY_PATH = "/site/v1/commerce/availability/{variantId}";
 /** @type {keyof SiteApiPaths} */
 const CHECKOUT_PATH = "/site/v1/commerce/checkout-sessions";
 
+/** @type {keyof SiteApiPaths} */
+const NEWSLETTER_PATH = "/site/v1/newsletter/subscriptions";
+/** @type {keyof SiteApiPaths} */
+const STOCK_SUBSCRIPTION_PATH = "/site/v1/commerce/stock-subscriptions";
+
 /**
  * @param {string} template
  * @param {Record<string, string>} parameters
  */
 function expandPath(template, parameters) {
   return Object.entries(parameters).reduce(
-    (path, [name, value]) => path.replace(`{${name}}`, encodeURIComponent(value)),
+    (path, [name, value]) =>
+      path.replace(`{${name}}`, encodeURIComponent(value)),
     template,
   );
 }
@@ -71,7 +79,10 @@ export class ReaiSiteClient {
    */
   constructor(options) {
     if (!options.token) throw new TypeError("token is required");
-    this.#baseUrl = (options.baseUrl || "https://app.reai.no").replace(/\/$/, "");
+    this.#baseUrl = (options.baseUrl || "https://app.reai.no").replace(
+      /\/$/,
+      "",
+    );
     this.#token = String(options.token).trim();
     if (!this.#token) throw new TypeError("token is required");
     const fetchImpl = options.fetch || globalThis.fetch.bind(globalThis);
@@ -117,10 +128,15 @@ export class ReaiSiteClient {
     /** @type {SiteApiOperations["storefront"]["parameters"]["query"]} */
     const query = context;
     /** @type {NonNullable<SiteApiOperations["storefront"]["parameters"]["header"]>} */
-    const operationHeaders = ifNoneMatch ? { "If-None-Match": ifNoneMatch } : {};
+    const operationHeaders = ifNoneMatch
+      ? { "If-None-Match": ifNoneMatch }
+      : {};
     const headers = new Headers();
-    if (operationHeaders["If-None-Match"]) headers.set("If-None-Match", operationHeaders["If-None-Match"]);
-    return new SiteApiResponse(await this.#request(STOREFRONT_PATH, query, { headers }));
+    if (operationHeaders["If-None-Match"])
+      headers.set("If-None-Match", operationHeaders["If-None-Match"]);
+    return new SiteApiResponse(
+      await this.#request(STOREFRONT_PATH, query, { headers }),
+    );
   }
 
   /**
@@ -132,10 +148,25 @@ export class ReaiSiteClient {
     /** @type {SiteApiOperations["catalog"]["parameters"]["query"]} */
     const query = context;
     /** @type {NonNullable<SiteApiOperations["catalog"]["parameters"]["header"]>} */
-    const operationHeaders = ifNoneMatch ? { "If-None-Match": ifNoneMatch } : {};
+    const operationHeaders = ifNoneMatch
+      ? { "If-None-Match": ifNoneMatch }
+      : {};
     const headers = new Headers();
-    if (operationHeaders["If-None-Match"]) headers.set("If-None-Match", operationHeaders["If-None-Match"]);
-    return new SiteApiResponse(await this.#request(CATALOG_PATH, query, { headers }));
+    if (operationHeaders["If-None-Match"])
+      headers.set("If-None-Match", operationHeaders["If-None-Match"]);
+    return new SiteApiResponse(
+      await this.#request(CATALOG_PATH, query, { headers }),
+    );
+  }
+
+  /**
+   * @param {DeliveryContext} context
+   * @returns {Promise<SiteApiResponse<SiteCatalog>>}
+   */
+  async products(context) {
+    /** @type {SiteApiOperations["products"]["parameters"]["query"]} */
+    const query = context;
+    return new SiteApiResponse(await this.#request(PRODUCTS_PATH, query));
   }
 
   /**
@@ -148,7 +179,9 @@ export class ReaiSiteClient {
     const path = { handle };
     /** @type {SiteApiOperations["product"]["parameters"]["query"]} */
     const query = context;
-    return new SiteApiResponse(await this.#request(expandPath(PRODUCT_PATH, path), query));
+    return new SiteApiResponse(
+      await this.#request(expandPath(PRODUCT_PATH, path), query),
+    );
   }
 
   /**
@@ -171,7 +204,9 @@ export class ReaiSiteClient {
     const path = { handle };
     /** @type {SiteApiOperations["collection"]["parameters"]["query"]} */
     const query = context;
-    return new SiteApiResponse(await this.#request(expandPath(COLLECTION_PATH, path), query));
+    return new SiteApiResponse(
+      await this.#request(expandPath(COLLECTION_PATH, path), query),
+    );
   }
 
   /**
@@ -195,7 +230,9 @@ export class ReaiSiteClient {
     const path = { variantId };
     /** @type {SiteApiOperations["availability"]["parameters"]["query"]} */
     const query = context;
-    return new SiteApiResponse(await this.#request(expandPath(AVAILABILITY_PATH, path), query));
+    return new SiteApiResponse(
+      await this.#request(expandPath(AVAILABILITY_PATH, path), query),
+    );
   }
 
   /**
@@ -209,11 +246,42 @@ export class ReaiSiteClient {
     const query = context;
     /** @type {SiteApiOperations["createCheckoutSession"]["parameters"]["header"]} */
     const operationHeaders = { "Idempotency-Key": idempotencyKey };
-    const headers = new Headers({ ...operationHeaders, "Content-Type": "application/json" });
-    return new SiteApiResponse(await this.#request(CHECKOUT_PATH, query, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    }));
+    const headers = new Headers({
+      ...operationHeaders,
+      "Content-Type": "application/json",
+    });
+    return new SiteApiResponse(
+      await this.#request(CHECKOUT_PATH, query, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+      }),
+    );
+  }
+  /**
+   * @param {import("./site-api.d.ts").components["schemas"]["SiteNewsletterSubscriptionReq"]} body
+   * @returns {Promise<SiteApiResponse<import("./site-api.d.ts").components["schemas"]["SiteNewsletterSubscriptionRes"]>>}
+   */
+  async subscribeNewsletter(body) {
+    return new SiteApiResponse(
+      await this.#request(NEWSLETTER_PATH, undefined, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  }
+  /**
+   * @param {import('./site-api.d.ts').components['schemas']['SiteStockSubscriptionReq']} body
+   * @returns {Promise<SiteApiResponse<import('./site-api.d.ts').components['schemas']['SiteStockSubscriptionRes']>>}
+   */
+  async subscribeStock(body) {
+    return new SiteApiResponse(
+      await this.#request(STOCK_SUBSCRIPTION_PATH, undefined, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
   }
 }

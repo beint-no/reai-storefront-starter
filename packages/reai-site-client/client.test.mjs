@@ -18,6 +18,7 @@ test("builds every Site API operation from the generated contract", async () => 
   await client.site();
   await client.storefront(context, 'W/"storefront"');
   await client.catalog(context, 'W/"catalog"');
+  await client.products(context);
   await client.product("shoe/name", context);
   await client.collections(context);
   await client.collection("best sellers", context);
@@ -29,12 +30,13 @@ test("builds every Site API operation from the generated contract", async () => 
   }, context, "checkout-key");
 
   assert.deepEqual(requests.map((request) => request.method), [
-    "GET", "GET", "GET", "GET", "GET", "GET", "GET", "GET", "POST",
+    "GET", "GET", "GET", "GET", "GET", "GET", "GET", "GET", "GET", "POST",
   ]);
   assert.deepEqual(requests.map((request) => new URL(request.url).pathname), [
     "/site/v1/site",
     "/site/v1/commerce/storefront",
     "/site/v1/commerce/catalog",
+    "/site/v1/commerce/products",
     "/site/v1/commerce/products/shoe%2Fname",
     "/site/v1/commerce/collections",
     "/site/v1/commerce/collections/best%20sellers",
@@ -50,9 +52,9 @@ test("builds every Site API operation from the generated contract", async () => 
   }
   assert.equal(requests[1].headers.get("If-None-Match"), 'W/"storefront"');
   assert.equal(requests[2].headers.get("If-None-Match"), 'W/"catalog"');
-  assert.deepEqual(new URL(requests[6].url).searchParams.getAll("variantId"), ["variant-1", "variant-2"]);
-  assert.equal(requests[8].headers.get("Idempotency-Key"), "checkout-key");
-  assert.deepEqual(await requests[8].json(), {
+  assert.deepEqual(new URL(requests[7].url).searchParams.getAll("variantId"), ["variant-1", "variant-2"]);
+  assert.equal(requests[9].headers.get("Idempotency-Key"), "checkout-key");
+  assert.deepEqual(await requests[9].json(), {
     lines: [{ variantId: "018f3c2e-8b1a-4d3e-9c4f-5a6b7c8d9e0f", quantity: 2 }],
     returnUrl: "https://shop.example/complete/",
   });

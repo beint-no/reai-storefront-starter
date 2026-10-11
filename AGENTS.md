@@ -29,3 +29,14 @@ ReAI supplies the actual deployment identity for a generated client store.
 Each generated repository is independently usable. Customize src/store-content.js
 and public/styles.css, review merchant details/policies, run npm run check, and
 use the generated repository's approved publishing workflow.
+
+The starter includes collections, catalog search/filter/sort from backend data,
+variant prices and stock, image galleries, a cart drawer and full cart page,
+hosted checkout, newsletter consent, language/market selection and information
+pages. ReAI owns catalog data; store-content.js owns approved business copy.
+A checkout return alone never proves payment and does not clear the cart.
+
+Newsletter signup is enabled by default and records explicit consent. Welcome
+emails require a configured ReAI flow. stockNotificationsEnabled defaults to
+false; enable only with an active back-in-stock flow and approved privacy text.
+Stock alerts require separate consent and never subscribe someone to a newsletter.
