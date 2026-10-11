@@ -37,6 +37,9 @@ pages. ReAI owns catalog data; store-content.js owns approved business copy.
 A checkout return alone never proves payment and does not clear the cart.
 Mobile filters keep a draft until Apply; Cancel/Escape discard it. Cart quantities
 update automatically, including removal at zero and undo of the last removed line.
+Catalog product links retain a validated local return path with filters, sort,
+market/language and a product anchor. Product search matches SKU and options on
+the same variant; language switches never rewrite content or education links.
 Demo lessons, fashion fixtures and checkout simulations are not part of this template.
 
 Newsletter signup is enabled by default and records explicit consent. Welcome

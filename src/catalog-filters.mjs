@@ -34,8 +34,9 @@ export function renderCatalogFilters(
       productType,
       attributes,
       variants: variants.map(
-        ({ id, price, compareAtPrice, options, attributes }) => ({
+        ({ id, sku, price, compareAtPrice, options, attributes }) => ({
           id,
+          sku,
           price,
           compareAtPrice,
           options,

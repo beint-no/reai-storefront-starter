@@ -201,7 +201,7 @@ function page(site, store, title, body, status = 200) {
   </div><div class="shell footer-bottom"><span>© ${new Date().getUTCFullYear()} ${escapeHtml(legalName)}${config.organizationNumber ? ` · ${escapeHtml(config.organizationNumber)}` : ""}</span><span>${t.poweredBy} <a href="https://reai.no" rel="external">ReAI</a></span></div></footer>
   ${site && store.pagePath !== "/cart" ? `<dialog class="cart-drawer" data-cart-dialog aria-labelledby="cart-drawer-title"><div class="drawer-heading"><h2 id="cart-drawer-title">${t.yourCart}</h2><button type="button" data-close-cart aria-label="${t.close}">×</button></div>${cartContents(store)}<a class="text-link" href="/cart">${t.viewCart} ↗</a></dialog>` : ""}
   <script src="/store.js" type="module"></script>
-  <script src="/assets/catalog-filters.js" type="module"></script>
+  <script src="/assets/catalog-context.js" type="module"></script><script src="/assets/catalog-filters.js" type="module"></script>
 </body>
 </html>`;
   return new Response(
@@ -339,7 +339,7 @@ function productPage(site, store, product, requestedVariant) {
     store,
     product.title,
     `<section class="shell inner-page">
-    <a class="breadcrumb" href="/collections/all">${t.backAllProducts}</a>
+    <nav class="product-navigation"><a class="breadcrumb" href="/collections/all">${t.backAllProducts}</a><a class="breadcrumb" data-catalog-return hidden>${String(store.locale).startsWith("en")?"← Back to results":"← Tilbake til resultatlisten"}</a></nav>
     <div class="product-detail"><div><div class="detail-image" data-gallery-main>${picture(product)}</div>${
       product.images?.length > 1
         ? `<div class="product-thumbnails" role="group" aria-label="${t.images}">${product.images

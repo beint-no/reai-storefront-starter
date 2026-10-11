@@ -98,29 +98,14 @@ export function catalogFacets(products, locale = "nb") {
 
 export function matchingVariants(product, state = {}, statuses = new Map()) {
   const query = normalize(state.query);
-  const search = normalize(
-    [
-      product.title,
-      product.description,
-      product.brand,
-      product.productType,
-      product.category?.name,
-      ...[
-        ...(product.attributes || []),
-        ...product.variants.flatMap((v) => v.attributes || []),
-      ].flatMap((a) =>
-        a.values.flatMap((v) => [
-          v.label,
-          ...(v.aliases || []),
-          ...v.taxonomyValues.map((t) => t.name),
-        ]),
-      ),
-      ...product.variants.flatMap((v) => (v.options || []).map((o) => o.value)),
-    ].join(" "),
-  );
-  if (query && !query.split(/\s+/).every((word) => search.includes(word)))
-    return [];
+  const base = [product.title, product.description, product.brand, product.productType, product.category?.name];
   return product.variants.filter((variant) => {
+    const search = normalize([
+      ...base, variant.sku,
+      ...[...(product.attributes || []), ...(variant.attributes || [])].flatMap((a) => a.values.flatMap((v) => [v.label, ...(v.aliases || []), ...(v.taxonomyValues || []).map((t) => t.name)])),
+      ...(variant.options || []).map((o) => o.value),
+    ].join(" "));
+    if (query && !query.split(/\s+/).every((word) => search.includes(word))) return false;
     const price = Number(variant.price);
     if (state.min != null && (!Number.isFinite(price) || price < state.min))
       return false;
