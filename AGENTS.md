@@ -51,7 +51,7 @@ Stock alerts require separate consent and never subscribe someone to a newslette
 
 Open PRs receive a stable isolated Cloudflare Preview URL, updated on pushes
 and removed on close. `.github/workflows/preview.yml` builds without deployment
-credentials, then requests the trusted workflow in beint-no/reai through signed
+credentials, then requests the trusted preview workflow in beint-no/reai-site-examples through signed
 GitHub Actions OIDC. Cloudflare credentials stay in the central deployment repository.
 The server maps this repository to its assigned Worker, verifies the current PR,
 and provides only a read-only PREVIEW Site credential where catalog access is needed.
