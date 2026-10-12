@@ -46,3 +46,16 @@ Newsletter signup is enabled by default and records explicit consent. Welcome
 emails require a configured ReAI flow. stockNotificationsEnabled defaults to
 false; enable only with an active back-in-stock flow and approved privacy text.
 Stock alerts require separate consent and never subscribe someone to a newsletter.
+
+## Automatic PR previews
+
+Open PRs receive a stable isolated Cloudflare Preview URL, updated on pushes
+and removed on close. `.github/workflows/preview.yml` builds without deployment
+credentials, then requests the trusted workflow in beint-no/reai through signed
+GitHub Actions OIDC. Cloudflare credentials stay in the central deployment repository.
+The server maps this repository to its assigned Worker, verifies the current PR,
+and provides only a read-only PREVIEW Site credential where catalog access is needed.
+Previews are noindex and reject orders, payments and form submissions.
+Manually dispatch PR previews with a PR number to backfill an already-open PR.
+Register independently created repositories in the server's customer preview registry;
+new repositories created through the e-commerce module are recognized automatically.
