@@ -11,5 +11,10 @@
   },
   "vars": {
     "REAI_API_BASE_URL": "https://app.reai.no"
+  },
+  "previews": {
+    "vars": {
+      "REAI_API_BASE_URL": "https://app.reai.no"
+    }
   }
 }

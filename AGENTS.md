@@ -46,3 +46,14 @@ Newsletter signup is enabled by default and records explicit consent. Welcome
 emails require a configured ReAI flow. stockNotificationsEnabled defaults to
 false; enable only with an active back-in-stock flow and approved privacy text.
 Stock alerts require separate consent and never subscribe someone to a newsletter.
+
+## Automatic PR previews
+
+The export includes `.github/workflows/preview.yml` and `.github/preview/preview.mjs`.
+ReAI verifies both and configures CLOUDFLARE_PREVIEW_API_TOKEN,
+CLOUDFLARE_PREVIEW_ACCOUNT_ID and REAI_PREVIEW_CREDENTIAL when creating a store.
+The credential is PREVIEW and has only Site, catalog and availability reads.
+Open same-repository PRs receive stable URLs, update on pushes and are removed on close.
+Builds run without deployment secrets; deploy uses reviewed default-branch tooling.
+Previews are noindex and reject orders, payments and form submissions.
+Dispatch PR previews manually with a PR number to backfill existing open PRs.
