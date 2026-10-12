@@ -1,0 +1,10 @@
+[
+  {
+    "id": "test-reai-storefront",
+    "config": "wrangler.jsonc",
+    "credentialBinding": "REAI_SITE_CREDENTIAL",
+    "checks": [
+      "check"
+    ]
+  }
+]
