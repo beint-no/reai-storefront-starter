@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -15,6 +15,18 @@ const artifact = path.resolve(artifactPath);
 const previewName = `review-${process.env.PR_NUMBER}`;
 const environment = `${config.name}-${previewName}`;
 const marker = `<!-- reai-pr-preview:${config.name} -->`;
+
+async function compiledEntrypoint(name) {
+  for (const candidate of new Set([name, `${path.parse(name).name}.js`])) {
+    try {
+      await access(path.join(artifact, "worker", candidate));
+      return candidate;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  throw new Error("Compiled preview entrypoint is missing");
+}
 
 function wrangler(args, options = {}) {
   return execFileSync("wrangler", args, { stdio: "inherit", ...options });
@@ -98,7 +110,7 @@ if (command === "build") {
   if (config.assets) {
     await cp(path.resolve(path.dirname(configFile), config.assets.directory), path.join(artifact, "assets"), { recursive: true });
   }
-  await writeFile(path.join(artifact, "entrypoint.json"), JSON.stringify(path.basename(config.main)));
+  await writeFile(path.join(artifact, "entrypoint.json"), JSON.stringify(await compiledEntrypoint(path.basename(config.main))));
 } else if (["deploy", "cleanup", "publish", "remove"].includes(command)) {
   const vars = { ...config.vars, ...config.previews?.vars, CHECKOUT_ENABLED: "false", DEMO_CHECKOUT_ENABLED: "false" };
   // Build hooks, routes and production resource bindings never enter the credentialed job.
@@ -126,8 +138,9 @@ if (command === "build") {
         process.exit(0);
       }
     }
-    const entrypoint = JSON.parse(await readFile(path.join(artifact, "entrypoint.json"), "utf8"));
+    let entrypoint = JSON.parse(await readFile(path.join(artifact, "entrypoint.json"), "utf8"));
     if (typeof entrypoint !== "string" || !/^[a-zA-Z0-9_.-]+\.(?:m?js)$/.test(entrypoint)) throw new Error("Invalid preview entrypoint");
+    entrypoint = await compiledEntrypoint(entrypoint);
     await writeFile(path.join(artifact, "preview-worker.mjs"), `import worker from "./worker/${entrypoint}";
 export default {
   async fetch(request, env, ctx) {
