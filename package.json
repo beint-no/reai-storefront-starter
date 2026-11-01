@@ -9,12 +9,12 @@
     "dev": "wrangler dev",
     "check": "node --check src/worker.js && node --check public/store.js && node --check public/assets/catalog-filters.js && node --check public/assets/catalog-context.js && node --check public/assets/cart-controls.js && node --test src/*.test.js",
     "deploy": "npm run check && wrangler deploy",
-    "deploy:local": "npm exec --yes --package=wrangler@4.149.0 -- node tools/worker.mjs deploy",
-    "preview:deploy": "npm exec --yes --package=wrangler@4.149.0 -- node tools/worker.mjs preview",
-    "preview:remove": "npm exec --yes --package=wrangler@4.149.0 -- node tools/worker.mjs remove"
+    "deploy:local": "node tools/worker.mjs deploy",
+    "preview:deploy": "node tools/worker.mjs preview",
+    "preview:remove": "node tools/worker.mjs remove"
   },
   "devDependencies": {
-    "wrangler": "4.148.0"
+    "wrangler": "4.156.0"
   },
   "overrides": {
     "sharp": "0.35.5"
