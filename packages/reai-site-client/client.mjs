@@ -235,6 +235,46 @@ export class ReaiSiteClient {
     );
   }
 
+  /** @param {string} id @returns {Promise<SiteApiResponse<import("./site-api.d.ts").components["schemas"]["SiteCheckoutDetailsDto"]>>} */
+  async checkoutDetails(id) {
+    return new SiteApiResponse(
+      await this.#request(expandPath("/site/v1/commerce/checkout-sessions/{id}", { id })),
+    );
+  }
+
+  /** @param {string} id @param {import("./site-api.d.ts").components["schemas"]["SiteCheckoutUpdateReq"]} body @returns {Promise<SiteApiResponse<import("./site-api.d.ts").components["schemas"]["SiteCheckoutDetailsDto"]>>} */
+  async updateCheckout(id, body) {
+    return new SiteApiResponse(
+      await this.#request(expandPath("/site/v1/commerce/checkout-sessions/{id}", { id }), undefined, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  }
+
+  /** @param {string} id @param {import("./site-api.d.ts").components["schemas"]["SiteCheckoutOptionsReq"]} body @returns {Promise<SiteApiResponse<import("./site-api.d.ts").components["schemas"]["SiteCheckoutDeliveryOptionsDto"]>>} */
+  async checkoutDeliveryOptions(id, body) {
+    return new SiteApiResponse(
+      await this.#request(expandPath("/site/v1/commerce/checkout-sessions/{id}/delivery-options", { id }), undefined, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  }
+
+  /** @param {string} id @param {import("./site-api.d.ts").components["schemas"]["SiteCheckoutPrepareReq"]} body @returns {Promise<SiteApiResponse<import("./site-api.d.ts").components["schemas"]["SiteCheckoutDetailsDto"]>>} */
+  async prepareCheckoutPayment(id, body) {
+    return new SiteApiResponse(
+      await this.#request(expandPath("/site/v1/commerce/checkout-sessions/{id}/prepare-payment", { id }), undefined, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  }
+
   /**
    * @param {SiteCheckoutSessionRequest} body
    * @param {DeliveryContext} context

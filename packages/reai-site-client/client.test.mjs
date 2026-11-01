@@ -24,13 +24,17 @@ test("builds every Site API operation from the generated contract", async () => 
   await client.collection("best sellers", context);
   await client.availabilities(["variant-1", "variant-2"], context);
   await client.availability("variant/id", context);
+  await client.checkoutDetails("checkout-id");
+  await client.updateCheckout("checkout-id", { revision: 0, customer: { email: "demo@example.invalid" } });
+  await client.checkoutDeliveryOptions("checkout-id", { revision: 0, customer: { email: "demo@example.invalid" } });
+  await client.prepareCheckoutPayment("checkout-id", { revision: 1 });
   await client.createCheckoutSession({
     lines: [{ variantId: "018f3c2e-8b1a-4d3e-9c4f-5a6b7c8d9e0f", quantity: 2 }],
     returnUrl: "https://shop.example/complete/",
   }, context, "checkout-key");
 
   assert.deepEqual(requests.map((request) => request.method), [
-    "GET", "GET", "GET", "GET", "GET", "GET", "GET", "GET", "GET", "POST",
+    "GET", "GET", "GET", "GET", "GET", "GET", "GET", "GET", "GET", "GET", "PATCH", "POST", "POST", "POST",
   ]);
   assert.deepEqual(requests.map((request) => new URL(request.url).pathname), [
     "/site/v1/site",
@@ -42,9 +46,13 @@ test("builds every Site API operation from the generated contract", async () => 
     "/site/v1/commerce/collections/best%20sellers",
     "/site/v1/commerce/availability",
     "/site/v1/commerce/availability/variant%2Fid",
+    "/site/v1/commerce/checkout-sessions/checkout-id",
+    "/site/v1/commerce/checkout-sessions/checkout-id",
+    "/site/v1/commerce/checkout-sessions/checkout-id/delivery-options",
+    "/site/v1/commerce/checkout-sessions/checkout-id/prepare-payment",
     "/site/v1/commerce/checkout-sessions",
   ]);
-  for (const request of requests.slice(1)) {
+  for (const request of requests.slice(1, 9)) {
     const url = new URL(request.url);
     assert.equal(url.searchParams.get("market"), "norway");
     assert.equal(url.searchParams.get("locale"), "nb-NO");
@@ -53,8 +61,8 @@ test("builds every Site API operation from the generated contract", async () => 
   assert.equal(requests[1].headers.get("If-None-Match"), 'W/"storefront"');
   assert.equal(requests[2].headers.get("If-None-Match"), 'W/"catalog"');
   assert.deepEqual(new URL(requests[7].url).searchParams.getAll("variantId"), ["variant-1", "variant-2"]);
-  assert.equal(requests[9].headers.get("Idempotency-Key"), "checkout-key");
-  assert.deepEqual(await requests[9].json(), {
+  assert.equal(requests[13].headers.get("Idempotency-Key"), "checkout-key");
+  assert.deepEqual(await requests[13].json(), {
     lines: [{ variantId: "018f3c2e-8b1a-4d3e-9c4f-5a6b7c8d9e0f", quantity: 2 }],
     returnUrl: "https://shop.example/complete/",
   });
