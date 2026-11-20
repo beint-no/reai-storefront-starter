@@ -1104,13 +1104,17 @@ async function handle(request, env, url, ctx) {
     });
   }
   if (request.method !== "POST" && url.pathname === "/robots.txt") {
+    const disallowAll = url.hostname.endsWith(".workers.dev");
     return new Response(
-      `User-agent: *\nAllow: /\nDisallow: /cart\nDisallow: /checkout/\nDisallow: /reai/\nDisallow: /catalog.json\nSitemap: ${url.origin}${basePath}/sitemap.xml\n`,
+      disallowAll
+        ? "User-agent: *\nDisallow: /\n"
+        : `User-agent: *\nAllow: /\nDisallow: /cart\nDisallow: /checkout/\nDisallow: /reai/\nDisallow: /catalog.json\nSitemap: ${url.origin}${basePath}/sitemap.xml\n`,
       {
         headers: {
           ...SECURITY_HEADERS,
           "content-type": "text/plain; charset=utf-8",
-          "cache-control": "public, max-age=3600",
+          "cache-control": disallowAll ? "no-store" : "public, max-age=3600",
+          ...(disallowAll ? { "x-robots-tag": "noindex, nofollow" } : {}),
         },
       },
     );
@@ -1130,6 +1134,11 @@ async function handle(request, env, url, ctx) {
       return json({ error: "Invalid origin" }, 403);
     if (!request.headers.get("Content-Type")?.startsWith("application/json"))
       return json({ error: "Expected JSON" }, 415);
+    if (
+      url.pathname === "/checkout/start" &&
+      String(env.CHECKOUT_ENABLED || "").trim().toLowerCase() === "false"
+    )
+      return json({ error: "Checkout is not enabled" }, 403);
     if (
       url.pathname === "/reai/analytics" &&
       (url.hostname.endsWith(".workers.dev") ||
