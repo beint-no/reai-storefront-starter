@@ -70,24 +70,28 @@ async function recordRemoval() {
 async function recordPreview(url) {
   const deployment = await github("deployments", "POST", { ref: process.env.PR_SHA, environment, auto_merge: false, required_contexts: [], transient_environment: true, production_environment: false, description: `PR #${process.env.PR_NUMBER} preview` });
   await github(`deployments/${deployment.id}/statuses`, "POST", { state: "success", environment, environment_url: url, log_url: `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`, auto_inactive: true });
-  await comment(`Preview: [${config.name}](${url})\n\nUpdates on every push. Revision: \`${process.env.PR_SHA}\`. Read-only: orders, payments and form submissions are disabled. Removed when this PR closes.`);
+  await comment(`Preview: [${config.name}](${url})\n\nManual-only preview — dispatch the workflow again after new commits, and after closing this PR to remove it. Revision: \`${process.env.PR_SHA}\`. Read-only: orders, payments and form submissions are disabled.`);
   if (process.env.GITHUB_STEP_SUMMARY) await writeFile(process.env.GITHUB_STEP_SUMMARY, `Preview: [${config.name}](${url})\n`, { flag: "a" });
   console.log(url);
 }
 
 if (["deploy", "cleanup"].includes(command) && (config.vars?.REAI_MANAGED_PREVIEWS === "true" || config.previews?.vars?.REAI_MANAGED_PREVIEWS === "true")) {
-  const identity = await fetch(process.env.ACTIONS_ID_TOKEN_REQUEST_URL + "&audience=reai-storefront", {
-    headers: { Authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
-  });
-  if (!identity.ok) throw new Error("GitHub identity request failed");
-  const { value } = await identity.json();
-  console.log(`::add-mask::${value}`);
   const apiUrl = (config.previews?.vars?.REAI_PREVIEW_API_BASE_URL ?? config.vars?.REAI_API_BASE_URL ?? "https://app.reai.no").replace(/\/$/, "") + "/online-store/preview/";
   const run = { repositoryId: Number(process.env.GITHUB_REPOSITORY_ID), runId: Number(process.env.GITHUB_RUN_ID),
     attempt: Number(process.env.GITHUB_RUN_ATTEMPT), pullRequest: Number(process.env.PR_NUMBER), sha: process.env.PR_SHA,
     artifactName: process.env.ARTIFACT_NAME };
+  async function mintIdentityToken() {
+    const identity = await fetch(process.env.ACTIONS_ID_TOKEN_REQUEST_URL + "&audience=reai-storefront", {
+      headers: { Authorization: `Bearer ${process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` },
+    });
+    if (!identity.ok) throw new Error("GitHub identity request failed");
+    const { value } = await identity.json();
+    console.log(`::add-mask::${value}`);
+    return value;
+  }
   async function request(route) {
-    const response = await fetch(apiUrl + route, { method: "POST", headers: { Authorization: `Bearer ${value}`, "Content-Type": "application/json" }, body: JSON.stringify(run) });
+    const token = await mintIdentityToken();
+    const response = await fetch(apiUrl + route, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(run) });
     if (!response.ok) throw new Error(`Managed preview ${route} failed: ${response.status}`);
     return response.status === 204 ? null : response.json();
   }

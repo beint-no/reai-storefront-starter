@@ -2,8 +2,11 @@
   "$schema": "https://unpkg.com/wrangler/config-schema.json",
   "name": "test-reai-storefront",
   "main": "./src/worker.js",
-  "compatibility_date": "2026-10-30",
+  "compatibility_date": "2026-11-18",
   "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
@@ -14,9 +17,9 @@
   },
   "previews": {
     "vars": {
+      "REAI_API_BASE_URL": "https://app.reai.no",
       "REAI_MANAGED_PREVIEWS": "true",
-      "REAI_PREVIEW_API_BASE_URL": "https://app.reai.no",
-      "REAI_API_BASE_URL": "https://app.reai.no"
+      "REAI_PREVIEW_API_BASE_URL": "https://app.reai.no"
     }
   }
 }
