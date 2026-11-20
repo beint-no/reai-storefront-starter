@@ -496,6 +496,35 @@ test("handles /health, /robots.txt, and unknown 404 routes without contacting Re
   assert.match(robotsText, /Disallow: \/catalog\.json/);
   assert.match(robotsText, /Sitemap: https:\/\/store\.example\/sitemap\.xml/);
 
+  const workersRobots = await worker.fetch(
+    new Request("https://preview.example.workers.dev/robots.txt"),
+    configured,
+  );
+  assert.equal(workersRobots.status, 200);
+  assert.equal(workersRobots.headers.get("content-type"), "text/plain; charset=utf-8");
+  assert.equal(workersRobots.headers.get("x-robots-tag"), "noindex, nofollow");
+  assert.equal(workersRobots.headers.get("strict-transport-security"), "max-age=31536000");
+  assert.equal(await workersRobots.text(), "User-agent: *\nDisallow: /\n");
+
+  const workersRobotsHead = await worker.fetch(
+    new Request("https://preview.example.workers.dev/robots.txt", { method: "HEAD" }),
+    configured,
+  );
+  assert.equal(workersRobotsHead.status, 200);
+  assert.equal(workersRobotsHead.headers.get("x-robots-tag"), "noindex, nofollow");
+  assert.equal(await workersRobotsHead.text(), "");
+
+  const disabledCheckout = await worker.fetch(
+    signup(
+      { lines: [{ variantId: store.products[0].variants[0].id, quantity: 1 }] },
+      "/checkout/start",
+    ),
+    { ...configured, CHECKOUT_ENABLED: "false" },
+  );
+  assert.equal(disabledCheckout.status, 403);
+  assert.equal(disabledCheckout.headers.get("cache-control"), "no-store");
+  assert.match(disabledCheckout.headers.get("content-type") || "", /application\/json/);
+
   const missing = await worker.fetch(
     new Request("https://store.example/does-not-exist", {
       headers: { "Accept-Language": "nb-NO,nb;q=0.9" },
