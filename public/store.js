@@ -5,6 +5,8 @@ import {
   restoreCartFocus,
 } from "./assets/cart-controls.js";
 const CART_KEY = "reai-storefront-cart-v1";
+const CHECKOUT_KEY = "reai-storefront-checkout-key-v1";
+const SESSION_KEY = "reai-storefront-session-v1";
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const nb = /^(?:nb|nn|no)(?:-|$)/i.test(document.documentElement.lang);
@@ -61,11 +63,64 @@ for (const key of ["market", "locale"]) {
 }
 const route = (path) =>
   `${document.body.dataset.storeBase || ""}${path}${context.size ? "?" + context : ""}`;
-const money = (amount, catalog) =>
-  new Intl.NumberFormat(catalog.locale, {
+const money = (amount, formatContext) =>
+  new Intl.NumberFormat(formatContext.locale, {
     style: "currency",
-    currency: catalog.currency,
+    currency: formatContext.currency,
   }).format(amount);
+
+function analyticsSessionId() {
+  try {
+    const existing = sessionStorage.getItem(SESSION_KEY);
+    if (existing && UUID.test(existing)) return existing;
+    const created = crypto.randomUUID();
+    sessionStorage.setItem(SESSION_KEY, created);
+    return created;
+  } catch {
+    return null;
+  }
+}
+
+function trackEvent(kind, extra = {}) {
+  if (navigator.doNotTrack === "1" || location.hostname.endsWith(".workers.dev"))
+    return;
+  const sessionId = analyticsSessionId();
+  if (!sessionId) return;
+  const event = {
+    id: crypto.randomUUID(),
+    sessionId,
+    kind,
+    path: location.pathname || "/",
+    ...extra,
+  };
+  fetch(route("/reai/analytics"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ events: [event] }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+function checkoutIdempotencyKey() {
+  try {
+    const existing = sessionStorage.getItem(CHECKOUT_KEY);
+    if (existing && UUID.test(existing)) return existing;
+    const created = crypto.randomUUID();
+    sessionStorage.setItem(CHECKOUT_KEY, created);
+    return created;
+  } catch {
+    return crypto.randomUUID();
+  }
+}
+
+function clearCheckoutKey() {
+  try {
+    sessionStorage.removeItem(CHECKOUT_KEY);
+  } catch {
+    // Ignore storage restriction errors.
+  }
+}
+
 function readCart() {
   try {
     const value = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
@@ -93,6 +148,7 @@ function readCart() {
 }
 function saveCart(cart) {
   localStorage.setItem(CART_KEY, JSON.stringify(cart));
+  clearCheckoutKey();
   updateCount(cart);
 }
 function updateCount(cart = readCart()) {
@@ -106,6 +162,14 @@ function updateCount(cart = readCart()) {
     );
 }
 updateCount();
+
+const productPageNode = document.querySelector("[data-analytics-product-id]");
+const pageProductId = productPageNode?.dataset.analyticsProductId;
+trackEvent(
+  pageProductId && UUID.test(pageProductId) ? "product_view" : "page_view",
+  pageProductId && UUID.test(pageProductId) ? { productId: pageProductId } : {},
+);
+
 const dialog = document.querySelector("[data-cart-dialog]");
 let opener;
 async function openCart(source) {
@@ -169,6 +233,7 @@ document.querySelectorAll("[data-add-to-cart]").forEach((form) =>
     const message = form.querySelector("[data-add-message]");
     try {
       saveCart(cart);
+      trackEvent("add_to_cart", { variantId, quantity });
       message.textContent = text.added;
       openCart(button);
     } catch {
@@ -208,9 +273,10 @@ const cartRoot = document.querySelector("[data-cart-items]");
 const checkoutButton = document.querySelector("[data-start-checkout]");
 const checkoutError = document.querySelector("[data-checkout-error]");
 const cartTotal = document.querySelector("[data-cart-total]");
-let catalog,
+let catalog = null,
+  quote = null,
   stockIssues = new Map(),
-  loading,
+  loading = null,
   starting = false,
   removed = null;
 function report(message) {
@@ -225,17 +291,89 @@ function mutate(cart) {
   } catch {
     report(text.saveError);
   }
-  renderCart();
+  if (!cart.length) {
+    quote = null;
+    renderCart();
+  } else {
+    loadCart();
+  }
 }
+
+function buildVariantLookup() {
+  if (quote) {
+    const map = new Map();
+    for (const line of quote.lines || []) {
+      const meta = quote.items?.[line.variantId];
+      map.set(line.variantId, {
+        title: meta?.title || text.unavailable,
+        handle: meta?.handle || null,
+        options: meta?.options || [],
+        lineTotal: Number(line.total),
+        outOfStock: false,
+      });
+    }
+    return {
+      formatContext: { locale: quote.locale, currency: quote.currency },
+      variants: map,
+      authoritativeTotal: Number(quote.total),
+    };
+  }
+  if (catalog) {
+    const map = new Map(
+      catalog.products.flatMap((p) =>
+        p.variants.map((v) => [
+          v.id,
+          {
+            title: p.title,
+            handle: p.handle,
+            options: v.options || [],
+            unitPrice: Number(v.price),
+            outOfStock: Boolean(v.outOfStock),
+          },
+        ]),
+      ),
+    );
+    return {
+      formatContext: { locale: catalog.locale, currency: catalog.currency },
+      variants: map,
+      authoritativeTotal: null,
+    };
+  }
+  return null;
+}
+
 function renderCart() {
-  if (!catalog || !cartRoot) return;
+  if (!cartRoot) return;
   const cart = readCart();
-  const variants = new Map(
-    catalog.products.flatMap((p) =>
-      p.variants.map((v) => [v.id, { product: p, variant: v }]),
-    ),
-  );
   const focus = rememberCartFocus(cartRoot);
+  if (!cart.length) {
+    cartRoot.replaceChildren();
+    if (removed)
+      cartRoot.append(
+        undoControl(
+          removed.label,
+          () => {
+            const rows = readCart();
+            if (!rows.some((x) => x.variantId === removed.item.variantId))
+              rows.splice(removed.index, 0, removed.item);
+            removed = null;
+            mutate(rows);
+          },
+          nb,
+        ),
+      );
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = text.empty;
+    cartRoot.append(empty);
+    checkoutButton.disabled = true;
+    cartTotal.textContent = "";
+    restoreCartFocus(cartRoot, focus);
+    return;
+  }
+  const lookup = buildVariantLookup();
+  if (!lookup) return;
+  const { variants, formatContext, authoritativeTotal } = lookup;
   cartRoot.replaceChildren();
   if (removed)
     cartRoot.append(
@@ -251,50 +389,50 @@ function renderCart() {
         nb,
       ),
     );
-  if (!cart.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-state";
-    empty.textContent = text.empty;
-    cartRoot.append(empty);
-    checkoutButton.disabled = true;
-    cartTotal.textContent = "";
-    restoreCartFocus(cartRoot, focus);
-    return;
-  }
   let total = 0;
   for (const item of cart) {
     const found = variants.get(item.variantId),
       row = document.createElement("div");
     row.className = "cart-row";
     const name = document.createElement("div"),
-      title = document.createElement(found ? "a" : "span");
-    title.textContent = found?.product.title || text.unavailable;
-    if (found) {
+      title = document.createElement(found?.handle ? "a" : "span");
+    title.textContent = found?.title || text.unavailable;
+    if (found?.handle) {
       const target = new URL(
-        route(`/products/${encodeURIComponent(found.product.handle)}`),
+        route(`/products/${encodeURIComponent(found.handle)}`),
         location.origin,
       );
       target.searchParams.set("variant", item.variantId);
       title.href = target.pathname + target.search;
     }
     name.append(title);
-    if (found) {
+    if (found?.options?.length) {
       const options = document.createElement("small");
-      options.textContent = found.variant.options
+      options.textContent = found.options
         .map((o) => `${o.name}: ${o.value}`)
         .join(" · ");
       name.append(options);
     }
+    const lineAmount = found
+      ? Number.isFinite(found.lineTotal)
+        ? found.lineTotal
+        : found.unitPrice * item.quantity
+      : null;
     const detail = document.createElement("span");
-    detail.textContent = found
-      ? money(Number(found.variant.price) * item.quantity, catalog)
-      : text.removeToContinue;
+    detail.textContent =
+      found && Number.isFinite(lineAmount)
+        ? money(lineAmount, formatContext)
+        : text.removeToContinue;
     function removeLine() {
       removed = {
         item: { ...item },
         label: title.textContent,
         index: cart.indexOf(item),
       };
+      trackEvent("remove_from_cart", {
+        variantId: item.variantId,
+        quantity: item.quantity,
+      });
       mutate(cart.filter((i) => i.variantId !== item.variantId));
     }
     const quantity = quantityControl(
@@ -318,38 +456,66 @@ function renderCart() {
     remove.addEventListener("click", removeLine);
     row.append(name, detail, quantity, remove);
     const issue = stockIssues.get(item.variantId);
-    if (found?.variant.outOfStock || issue) {
+    if (found?.outOfStock || issue) {
       const warning = document.createElement("p");
       warning.className = "cart-stock-error";
       warning.setAttribute("role", "status");
       warning.textContent =
-        found?.variant.outOfStock || issue.maximumQuantity === 0
+        found?.outOfStock || issue.maximumQuantity === 0
           ? text.outOfStock
           : text.stockLimit(issue.maximumQuantity);
       row.append(warning);
     }
     cartRoot.append(row);
-    if (found) total += Number(found.variant.price) * item.quantity;
+    if (Number.isFinite(lineAmount)) total += lineAmount;
   }
+  const finalTotal = Number.isFinite(authoritativeTotal)
+    ? authoritativeTotal
+    : total;
   checkoutButton.disabled =
     starting ||
     cart.some(
       (i) =>
         !variants.has(i.variantId) ||
-        variants.get(i.variantId).variant.outOfStock ||
+        variants.get(i.variantId).outOfStock ||
         stockIssues.has(i.variantId),
     );
-  cartTotal.textContent = `${text.total}: ${money(total, catalog)}`;
+  cartTotal.textContent = `${text.total}: ${money(finalTotal, formatContext)}`;
   restoreCartFocus(cartRoot, focus);
 }
 async function loadCart() {
   if (!cartRoot || loading) return loading;
+  const cart = readCart();
+  if (!cart.length) {
+    quote = null;
+    checkoutError.hidden = true;
+    renderCart();
+    return;
+  }
   checkoutButton.disabled = true;
   cartRoot.textContent = text.loading;
   cartTotal.textContent = "";
   checkoutError.hidden = true;
   loading = (async () => {
     try {
+      const quoteResponse = await fetch(route("/reai/cart-quote"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lines: cart }),
+        cache: "no-store",
+      });
+      if (quoteResponse.ok) {
+        quote = await quoteResponse.json();
+        renderCart();
+        return;
+      }
+      if (quoteResponse.status === 409) {
+        const details = await quoteResponse.json().catch(() => ({}));
+        stockIssues = new Map(
+          (details.stockIssues || []).map((i) => [i.variantId, i]),
+        );
+      }
+      quote = null;
       const response = await fetch(route("/catalog.json"), {
         cache: "no-store",
       });
@@ -357,6 +523,7 @@ async function loadCart() {
       catalog = await response.json();
       renderCart();
     } catch {
+      quote = null;
       catalog = null;
       cartRoot.textContent = text.cartError;
       const retry = document.createElement("button");
@@ -379,12 +546,13 @@ checkoutButton?.addEventListener("click", async () => {
   checkoutButton.disabled = true;
   checkoutButton.textContent = text.opening;
   checkoutError.hidden = true;
+  trackEvent("checkout_view");
   try {
     const response = await fetch(route("/checkout/start"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Idempotency-Key": crypto.randomUUID(),
+        "Idempotency-Key": checkoutIdempotencyKey(),
       },
       body: JSON.stringify({ lines: readCart() }),
     });
@@ -395,6 +563,7 @@ checkoutButton?.addEventListener("click", async () => {
       );
       throw new Error(result.error || text.checkoutError);
     }
+    clearCheckoutKey();
     location.assign(result.checkoutUrl);
   } catch (error) {
     report(error.message || text.checkoutError);
@@ -406,8 +575,9 @@ checkoutButton?.addEventListener("click", async () => {
 });
 window.addEventListener("storage", (event) => {
   if (event.key === CART_KEY) {
+    clearCheckoutKey();
     updateCount();
-    renderCart();
+    loadCart();
   }
 });
 document

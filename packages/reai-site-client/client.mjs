@@ -1,7 +1,6 @@
 // @ts-check
 
 /** @typedef {import("./site-api.d.ts").paths} SiteApiPaths */
-/** @typedef {import("./site-api.d.ts").operations} SiteApiOperations */
 /** @typedef {import("./site-api.d.ts").components["schemas"]["SiteDeliveryRes"]} SiteDelivery */
 /** @typedef {import("./site-api.d.ts").components["schemas"]["SiteStorefrontRes"]} SiteStorefront */
 /** @typedef {import("./site-api.d.ts").components["schemas"]["SiteCatalogRes"]} SiteCatalog */
@@ -12,8 +11,13 @@
 /** @typedef {import("./site-api.d.ts").components["schemas"]["SiteAvailabilitiesRes"]} SiteAvailabilities */
 /** @typedef {import("./site-api.d.ts").components["schemas"]["SiteCheckoutSessionReq"]} SiteCheckoutSessionRequest */
 /** @typedef {import("./site-api.d.ts").components["schemas"]["SiteCheckoutSessionRes"]} SiteCheckoutSession */
+/** @typedef {import("./site-api.d.ts").components["schemas"]["SiteCartQuoteReq"]} SiteCartQuoteRequest */
+/** @typedef {import("./site-api.d.ts").components["schemas"]["SiteCartQuoteDto"]} SiteCartQuote */
+/** @typedef {import("./site-api.d.ts").components["schemas"]["SiteAnalyticsBatchDto"]} SiteAnalyticsBatch */
 /** @typedef {{ market: string, locale: string }} DeliveryContext */
-/** @typedef {{ baseUrl?: string, token: string, fetch?: typeof globalThis.fetch }} SiteApiClientOptions */
+/** @typedef {{ baseUrl?: string, token: string, fetch?: typeof globalThis.fetch, timeoutMs?: number }} SiteApiClientOptions */
+
+const DEFAULT_TIMEOUT_MS = 15_000;
 
 /** @type {keyof SiteApiPaths} */
 const SITE_PATH = "/site/v1/site";
@@ -34,7 +38,11 @@ const AVAILABILITIES_PATH = "/site/v1/commerce/availability";
 /** @type {keyof SiteApiPaths} */
 const AVAILABILITY_PATH = "/site/v1/commerce/availability/{variantId}";
 /** @type {keyof SiteApiPaths} */
+const CART_QUOTE_PATH = "/site/v1/commerce/cart-quote";
+/** @type {keyof SiteApiPaths} */
 const CHECKOUT_PATH = "/site/v1/commerce/checkout-sessions";
+/** @type {keyof SiteApiPaths} */
+const ANALYTICS_EVENTS_PATH = "/site/v1/analytics/events";
 
 /** @type {keyof SiteApiPaths} */
 const NEWSLETTER_PATH = "/site/v1/newsletter/subscriptions";
@@ -87,6 +95,11 @@ export class ReaiSiteClient {
     if (!this.#token) throw new TypeError("token is required");
     const fetchImpl = options.fetch || globalThis.fetch.bind(globalThis);
     this.#fetch = (input, init) => fetchImpl(input, init);
+    const timeoutMs = options.timeoutMs === undefined ? DEFAULT_TIMEOUT_MS : options.timeoutMs;
+    if (timeoutMs !== 0 && (!Number.isFinite(timeoutMs) || timeoutMs < 0)) {
+      throw new RangeError("timeoutMs must be a non-negative finite number");
+    }
+    this.#timeoutMs = timeoutMs;
   }
 
   /** @type {string} */
@@ -95,6 +108,8 @@ export class ReaiSiteClient {
   #token;
   /** @type {typeof globalThis.fetch} */
   #fetch;
+  /** @type {number} */
+  #timeoutMs;
 
   /**
    * @param {string} pathname
@@ -111,7 +126,12 @@ export class ReaiSiteClient {
     const headers = new Headers(init.headers);
     headers.set("Accept", "application/json");
     headers.set("Authorization", `Bearer ${this.#token}`);
-    return this.#fetch(url.href, { ...init, headers });
+    const signal =
+      init.signal ??
+      (this.#timeoutMs > 0 && typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+        ? AbortSignal.timeout(this.#timeoutMs)
+        : undefined);
+    return this.#fetch(url.href, signal ? { ...init, headers, signal } : { ...init, headers });
   }
 
   /** @returns {Promise<SiteApiResponse<SiteDelivery>>} */
@@ -125,9 +145,9 @@ export class ReaiSiteClient {
    * @returns {Promise<SiteApiResponse<SiteStorefront>>}
    */
   async storefront(context, ifNoneMatch = null) {
-    /** @type {SiteApiOperations["storefront"]["parameters"]["query"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/storefront"]["get"]["parameters"]["query"]} */
     const query = context;
-    /** @type {NonNullable<SiteApiOperations["storefront"]["parameters"]["header"]>} */
+    /** @type {NonNullable<SiteApiPaths["/site/v1/commerce/storefront"]["get"]["parameters"]["header"]>} */
     const operationHeaders = ifNoneMatch
       ? { "If-None-Match": ifNoneMatch }
       : {};
@@ -145,9 +165,9 @@ export class ReaiSiteClient {
    * @returns {Promise<SiteApiResponse<SiteCatalog>>}
    */
   async catalog(context, ifNoneMatch = null) {
-    /** @type {SiteApiOperations["catalog"]["parameters"]["query"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/catalog"]["get"]["parameters"]["query"]} */
     const query = context;
-    /** @type {NonNullable<SiteApiOperations["catalog"]["parameters"]["header"]>} */
+    /** @type {NonNullable<SiteApiPaths["/site/v1/commerce/catalog"]["get"]["parameters"]["header"]>} */
     const operationHeaders = ifNoneMatch
       ? { "If-None-Match": ifNoneMatch }
       : {};
@@ -164,7 +184,7 @@ export class ReaiSiteClient {
    * @returns {Promise<SiteApiResponse<SiteCatalog>>}
    */
   async products(context) {
-    /** @type {SiteApiOperations["products"]["parameters"]["query"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/products"]["get"]["parameters"]["query"]} */
     const query = context;
     return new SiteApiResponse(await this.#request(PRODUCTS_PATH, query));
   }
@@ -175,9 +195,9 @@ export class ReaiSiteClient {
    * @returns {Promise<SiteApiResponse<SiteProduct>>}
    */
   async product(handle, context) {
-    /** @type {SiteApiOperations["product"]["parameters"]["path"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/products/{handle}"]["get"]["parameters"]["path"]} */
     const path = { handle };
-    /** @type {SiteApiOperations["product"]["parameters"]["query"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/products/{handle}"]["get"]["parameters"]["query"]} */
     const query = context;
     return new SiteApiResponse(
       await this.#request(expandPath(PRODUCT_PATH, path), query),
@@ -189,7 +209,7 @@ export class ReaiSiteClient {
    * @returns {Promise<SiteApiResponse<SiteCollections>>}
    */
   async collections(context) {
-    /** @type {SiteApiOperations["collections"]["parameters"]["query"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/collections"]["get"]["parameters"]["query"]} */
     const query = context;
     return new SiteApiResponse(await this.#request(COLLECTIONS_PATH, query));
   }
@@ -200,9 +220,9 @@ export class ReaiSiteClient {
    * @returns {Promise<SiteApiResponse<SiteCollection>>}
    */
   async collection(handle, context) {
-    /** @type {SiteApiOperations["collection"]["parameters"]["path"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/collections/{handle}"]["get"]["parameters"]["path"]} */
     const path = { handle };
-    /** @type {SiteApiOperations["collection"]["parameters"]["query"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/collections/{handle}"]["get"]["parameters"]["query"]} */
     const query = context;
     return new SiteApiResponse(
       await this.#request(expandPath(COLLECTION_PATH, path), query),
@@ -215,7 +235,7 @@ export class ReaiSiteClient {
    * @returns {Promise<SiteApiResponse<SiteAvailabilities>>}
    */
   async availabilities(variantIds, context) {
-    /** @type {SiteApiOperations["availabilities"]["parameters"]["query"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/availability"]["get"]["parameters"]["query"]} */
     const query = { ...context, variantId: variantIds };
     return new SiteApiResponse(await this.#request(AVAILABILITIES_PATH, query));
   }
@@ -226,9 +246,9 @@ export class ReaiSiteClient {
    * @returns {Promise<SiteApiResponse<SiteAvailability>>}
    */
   async availability(variantId, context) {
-    /** @type {SiteApiOperations["availability"]["parameters"]["path"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/availability/{variantId}"]["get"]["parameters"]["path"]} */
     const path = { variantId };
-    /** @type {SiteApiOperations["availability"]["parameters"]["query"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/availability/{variantId}"]["get"]["parameters"]["query"]} */
     const query = context;
     return new SiteApiResponse(
       await this.#request(expandPath(AVAILABILITY_PATH, path), query),
@@ -282,9 +302,9 @@ export class ReaiSiteClient {
    * @returns {Promise<SiteApiResponse<SiteCheckoutSession>>}
    */
   async createCheckoutSession(body, context, idempotencyKey) {
-    /** @type {SiteApiOperations["createCheckoutSession"]["parameters"]["query"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/checkout-sessions"]["post"]["parameters"]["query"]} */
     const query = context;
-    /** @type {SiteApiOperations["createCheckoutSession"]["parameters"]["header"]} */
+    /** @type {SiteApiPaths["/site/v1/commerce/checkout-sessions"]["post"]["parameters"]["header"]} */
     const operationHeaders = { "Idempotency-Key": idempotencyKey };
     const headers = new Headers({
       ...operationHeaders,
@@ -318,6 +338,37 @@ export class ReaiSiteClient {
   async subscribeStock(body) {
     return new SiteApiResponse(
       await this.#request(STOCK_SUBSCRIPTION_PATH, undefined, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  }
+
+  /**
+   * @param {SiteCartQuoteRequest} body
+   * @param {DeliveryContext} [context]
+   * @returns {Promise<SiteApiResponse<SiteCartQuote>>}
+   */
+  async cartQuote(body, context) {
+    /** @type {SiteApiPaths["/site/v1/commerce/cart-quote"]["post"]["parameters"]["query"]} */
+    const query = context;
+    return new SiteApiResponse(
+      await this.#request(CART_QUOTE_PATH, query, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    );
+  }
+
+  /**
+   * @param {SiteAnalyticsBatch} body
+   * @returns {Promise<SiteApiResponse<void>>}
+   */
+  async recordAnalyticsEvents(body) {
+    return new SiteApiResponse(
+      await this.#request(ANALYTICS_EVENTS_PATH, undefined, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

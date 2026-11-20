@@ -1,6 +1,5 @@
 node_modules/
 .dev.vars
 .wrangler/
-.DS_Store
-
 .preview/
+.DS_Store

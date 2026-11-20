@@ -461,3 +461,422 @@ test("unknown stock blocks purchasing and optional back-in-stock needs independe
     storeContent.stockNotificationsEnabled = previous;
   }
 });
+
+test("handles /health, /robots.txt, and unknown 404 routes without contacting ReAI", async (context) => {
+  context.mock.method(globalThis, "fetch", () => {
+    throw new Error("Unexpected upstream request");
+  });
+  const health = await worker.fetch(
+    new Request("https://store.example/health"),
+    configured,
+  );
+  assert.equal(health.status, 200);
+  assert.deepEqual(await health.json(), { ok: true, configured: true });
+  assert.equal(
+    health.headers.get("strict-transport-security"),
+    "max-age=31536000",
+  );
+
+  const localHealth = await worker.fetch(
+    new Request("http://localhost:8787/health"),
+    configured,
+  );
+  assert.equal(localHealth.status, 200);
+  assert.equal(localHealth.headers.get("strict-transport-security"), null);
+
+  const robots = await worker.fetch(
+    new Request("https://store.example/robots.txt"),
+    configured,
+  );
+  assert.equal(robots.status, 200);
+  const robotsText = await robots.text();
+  assert.match(robotsText, /Disallow: \/cart/);
+  assert.match(robotsText, /Disallow: \/checkout\//);
+  assert.match(robotsText, /Disallow: \/reai\//);
+  assert.match(robotsText, /Disallow: \/catalog\.json/);
+  assert.match(robotsText, /Sitemap: https:\/\/store\.example\/sitemap\.xml/);
+
+  const missing = await worker.fetch(
+    new Request("https://store.example/does-not-exist", {
+      headers: { "Accept-Language": "nb-NO,nb;q=0.9" },
+    }),
+    configured,
+  );
+  assert.equal(missing.status, 404);
+  assert.equal(missing.headers.get("x-robots-tag"), "noindex, nofollow");
+  assert.equal(missing.headers.get("cache-control"), "no-store");
+  assert.match(await missing.text(), /Vi fant ikke denne siden/);
+});
+
+test("renders /pages/* and /policies/* gracefully when ReAI is unreachable", async (context) => {
+  context.mock.method(globalThis, "fetch", async () => {
+    throw new Error("Upstream down");
+  });
+  const res = await worker.fetch(
+    new Request("https://store.example/policies/privacy?locale=nb"),
+    configured,
+  );
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("content-language"), "nb");
+  assert.match(await res.text(), /Personvern/);
+});
+
+test("caches site and storefront with ETag, SWR, and stale-if-error", async (context) => {
+  const originalCaches = globalThis.caches;
+  const originalNow = Date.now;
+  context.after(() => {
+    globalThis.caches = originalCaches;
+    Date.now = originalNow;
+  });
+  let now = 1_000_000;
+  Date.now = () => now;
+  const memory = new Map();
+  globalThis.caches = {
+    default: {
+      async match(req) {
+        return memory.get(req.url)?.clone();
+      },
+      async put(req, res) {
+        memory.set(req.url, res.clone());
+      },
+    },
+  };
+  let failUpstream = false;
+  const calls = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
+    const url = String(input);
+    calls.push({ url, ifNoneMatch: init?.headers?.get("If-None-Match") });
+    if (failUpstream) throw new Error("Upstream offline");
+    if (url.endsWith("/site")) return Response.json(site);
+    if (url.includes("/availability"))
+      return Response.json({
+        variants: [{ variantId: store.products[0].variants[0].id, status: "AVAILABLE" }],
+      });
+    if (init?.headers?.get("If-None-Match") === 'W/"v1"')
+      return new Response(null, { status: 304 });
+    return Response.json(store, { headers: { ETag: 'W/"v1"' } });
+  });
+
+  const first = await worker.fetch(
+    new Request("https://store.example/collections"),
+    configured,
+    {},
+  );
+  assert.equal(first.status, 200);
+  assert.equal(
+    first.headers.get("cache-control"),
+    "public, max-age=60, stale-while-revalidate=300",
+  );
+  assert.equal(calls.length, 2);
+
+  // Within 60s -> full cache hit, no upstream calls
+  const second = await worker.fetch(
+    new Request("https://store.example/collections"),
+    configured,
+    {},
+  );
+  assert.equal(second.status, 200);
+  assert.equal(calls.length, 2);
+
+  // Within SWR window -> background revalidation with If-None-Match
+  now += 61_000;
+  const bg = [];
+  const stale = await worker.fetch(
+    new Request("https://store.example/collections"),
+    configured,
+    { waitUntil: (p) => bg.push(p) },
+  );
+  assert.equal(stale.status, 200);
+  await Promise.all(bg);
+  assert.ok(calls.some((c) => c.ifNoneMatch === 'W/"v1"'));
+
+  // Past SWR window with upstream failure -> serves stale-if-error
+  now += 400_000;
+  failUpstream = true;
+  const staleError = await worker.fetch(
+    new Request("https://store.example/collections"),
+    configured,
+    {},
+  );
+  assert.equal(staleError.status, 200);
+});
+
+test("preserves curated collection ordering, passes availability to filters, and degrades gracefully on availability failure", async (context) => {
+  const orderedStore = {
+    locale: "en",
+    currency: "USD",
+    products: [
+      {
+        id: "p-first",
+        handle: "first",
+        title: "First",
+        images: [],
+        variants: [
+          { id: "00000000-0000-4000-8000-000000000011", price: 10, options: [] },
+        ],
+      },
+      {
+        id: "p-second",
+        handle: "second",
+        title: "Second",
+        images: [],
+        variants: [
+          { id: "00000000-0000-4000-8000-000000000012", price: 20, options: [] },
+        ],
+      },
+    ],
+    collections: [
+      {
+        id: "c1",
+        handle: "featured",
+        title: "Featured",
+        seoTitle: "Featured SEO Title",
+        seoDescription: "Featured SEO Description",
+        products: [{ id: "p-second" }, { id: "p-first" }],
+      },
+    ],
+  };
+  let failAvailability = false;
+  context.mock.method(globalThis, "fetch", async (input) => {
+    const url = String(input);
+    if (url.endsWith("/site")) return Response.json(site);
+    if (url.includes("/availability")) {
+      if (failAvailability) return new Response("error", { status: 503 });
+      return Response.json({
+        variants: [
+          { variantId: "00000000-0000-4000-8000-000000000012", status: "AVAILABLE" },
+          { variantId: "00000000-0000-4000-8000-000000000011", status: "OUT_OF_STOCK" },
+        ],
+      });
+    }
+    return Response.json(orderedStore);
+  });
+
+  const res = await worker.fetch(
+    new Request("https://store.example/collections/featured"),
+    configured,
+  );
+  assert.equal(res.status, 200);
+  const html = await res.text();
+  assert.ok(html.indexOf("/products/second") < html.indexOf("/products/first"));
+  assert.match(html, /<title>Featured SEO Title · Sample &lt;Shop&gt;<\/title>/);
+  assert.match(html, /Featured SEO Description/);
+  assert.match(html, /catalog-filters\.js/);
+  assert.match(html, /00000000-0000-4000-8000-000000000012&quot;,&quot;AVAILABLE/);
+
+  // Availability failure does not 502 the page
+  failAvailability = true;
+  const degraded = await worker.fetch(
+    new Request("https://store.example/collections/featured"),
+    configured,
+  );
+  assert.equal(degraded.status, 200);
+});
+
+test("emits SEO metadata, JSON-LD, sitemap.xml, workers.dev noindex, and omits catalog-filters.js off collections", async (context) => {
+  const richSite = {
+    name: "Nordic Shop",
+    markets: [
+      {
+        handle: "default",
+        defaultLocale: "nb-NO",
+        locales: ["nb-NO", "en"],
+        currency: "NOK",
+        isDefault: true,
+      },
+    ],
+  };
+  const richStore = {
+    locale: "nb-NO",
+    currency: "NOK",
+    products: [
+      {
+        id: "00000000-0000-4000-8000-000000000099",
+        handle: "wool-coat",
+        title: "Wool Coat",
+        seoTitle: "Best Wool Coat",
+        seoDescription: "Warm Norwegian wool coat.",
+        brand: "Nordic",
+        images: [{ url: "https://cdn.example/coat.jpg", width: 800, height: 1000 }],
+        variants: [
+          {
+            id: "00000000-0000-4000-8000-000000000001",
+            sku: "COAT-1",
+            price: 1200,
+            options: [{ name: "Size", value: "M" }],
+          },
+        ],
+      },
+    ],
+    collections: [{ id: "c1", handle: "winter", title: "Winter", products: [] }],
+  };
+  context.mock.method(globalThis, "fetch", async (input) => {
+    const url = String(input);
+    if (url.endsWith("/site")) return Response.json(richSite);
+    if (url.includes("/availability"))
+      return Response.json({
+        variants: [{ variantId: "00000000-0000-4000-8000-000000000001", status: "AVAILABLE" }],
+      });
+    return Response.json(richStore);
+  });
+
+  const pdp = await worker.fetch(
+    new Request("https://store.example/products/wool-coat?variant=00000000-0000-4000-8000-000000000001"),
+    configured,
+  );
+  assert.equal(pdp.status, 200);
+  assert.equal(pdp.headers.get("content-language"), "nb-NO");
+  assert.equal(pdp.headers.get("x-robots-tag"), null);
+  const pdpHtml = await pdp.text();
+  assert.match(pdpHtml, /<title>Best Wool Coat · Nordic Shop<\/title>/);
+  assert.match(pdpHtml, /<link rel="canonical" href="https:\/\/store\.example\/products\/wool-coat">/);
+  assert.match(pdpHtml, /hreflang="nb-NO"/);
+  assert.match(pdpHtml, /hreflang="en"/);
+  assert.match(pdpHtml, /hreflang="x-default"/);
+  assert.match(pdpHtml, /property="og:type" content="product"/);
+  assert.match(pdpHtml, /application\/ld\+json/);
+  assert.match(pdpHtml, /"priceCurrency":"NOK"/);
+  assert.match(pdpHtml, /loading="eager" fetchpriority="high"/);
+  assert.doesNotMatch(pdpHtml, /catalog-filters\.js/);
+
+  const preview = await worker.fetch(
+    new Request("https://preview.example.workers.dev/products/wool-coat"),
+    configured,
+  );
+  assert.equal(preview.headers.get("x-robots-tag"), "noindex, nofollow");
+
+  const sitemap = await worker.fetch(
+    new Request("https://store.example/sitemap.xml"),
+    configured,
+  );
+  assert.equal(sitemap.status, 200);
+  const xml = await sitemap.text();
+  assert.match(xml, /<loc>https:\/\/store\.example\/products\/wool-coat<\/loc>/);
+  assert.match(xml, /<loc>https:\/\/store\.example\/collections\/winter<\/loc>/);
+});
+
+test("supports /reai/cart-quote, /reai/analytics, Idempotency-Key validation, and returnUrl context preservation", async (context) => {
+  const multilingual = {
+    ...site,
+    markets: [
+      {
+        handle: "default",
+        defaultLocale: "nb-NO",
+        locales: ["nb-NO", "en"],
+        currency: "NOK",
+        isDefault: true,
+      },
+    ],
+  };
+  const calls = [];
+  context.mock.method(globalThis, "fetch", async (input, init) => {
+    const url = String(input);
+    calls.push({ url, init });
+    if (url.endsWith("/site")) return Response.json(multilingual);
+    if (url.includes("/cart-quote")) {
+      return Response.json({
+        currency: "NOK",
+        locale: "en",
+        discount: 0,
+        subtotal: 50,
+        total: 50,
+        lines: [
+          {
+            variantId: store.products[0].variants[0].id,
+            quantity: 2,
+            unitPrice: 25,
+            subtotal: 50,
+            total: 50,
+          },
+        ],
+      });
+    }
+    if (url.includes("/analytics/events")) return new Response(null, { status: 200 });
+    if (url.includes("/checkout-sessions"))
+      return Response.json({ checkoutUrl: "https://app.example.test/checkout/session/test" });
+    return Response.json(store);
+  });
+
+  const quoteRes = await worker.fetch(
+    signup(
+      { lines: [{ variantId: store.products[0].variants[0].id, quantity: 2 }] },
+      "/reai/cart-quote?market=default&locale=en",
+    ),
+    configured,
+  );
+  assert.equal(quoteRes.status, 200);
+  const quoteJson = await quoteRes.json();
+  assert.equal(quoteJson.total, 50);
+  assert.equal(quoteJson.items[store.products[0].variants[0].id].handle, "lamp");
+
+  // Analytics no-op on workers.dev
+  const devAnalytics = await worker.fetch(
+    new Request("https://demo.test.workers.dev/reai/analytics", {
+      method: "POST",
+      headers: {
+        Origin: "https://demo.test.workers.dev",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        events: [
+          {
+            id: "00000000-0000-4000-8000-000000000021",
+            sessionId: "00000000-0000-4000-8000-000000000022",
+            kind: "page_view",
+            path: "/",
+          },
+        ],
+      }),
+    }),
+    configured,
+  );
+  assert.equal(devAnalytics.status, 204);
+  assert.ok(!calls.some((c) => c.url.includes("/analytics/events")));
+
+  // Analytics forwards on custom domain
+  const liveAnalytics = await worker.fetch(
+    signup(
+      {
+        events: [
+          {
+            id: "00000000-0000-4000-8000-000000000021",
+            sessionId: "00000000-0000-4000-8000-000000000022",
+            kind: "page_view",
+            path: "/",
+          },
+        ],
+      },
+      "/reai/analytics",
+    ),
+    configured,
+  );
+  assert.equal(liveAnalytics.status, 204);
+  assert.ok(calls.some((c) => c.url.includes("/analytics/events")));
+
+  // Invalid Idempotency-Key rejected
+  const badKey = await worker.fetch(
+    signup(
+      { lines: [{ variantId: store.products[0].variants[0].id, quantity: 1 }] },
+      "/checkout/start",
+      { "Idempotency-Key": "bad key!" },
+    ),
+    configured,
+  );
+  assert.equal(badKey.status, 400);
+
+  // Non-default locale preserved in returnUrl
+  const checkoutRes = await worker.fetch(
+    signup(
+      { lines: [{ variantId: store.products[0].variants[0].id, quantity: 1 }] },
+      "/checkout/start?market=default&locale=en",
+      { "Idempotency-Key": "00000000-0000-4000-8000-000000000033" },
+    ),
+    configured,
+  );
+  assert.equal(checkoutRes.status, 200);
+  const checkoutCall = calls.find((c) => c.url.includes("/checkout-sessions"));
+  assert.equal(
+    JSON.parse(checkoutCall.init.body).returnUrl,
+    "https://store.example/checkout/complete?market=default&locale=en",
+  );
+});
