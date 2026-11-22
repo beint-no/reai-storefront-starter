@@ -171,7 +171,7 @@ function cartContents(store) {
 
 function defaultSiteMarket(site) {
   return (
-    site?.markets?.find((entry) => entry.isDefault) || site?.markets?.[0] || null
+    site?.markets?.find((entry) => entry.default) || site?.markets?.[0] || null
   );
 }
 
