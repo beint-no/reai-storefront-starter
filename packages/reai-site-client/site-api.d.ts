@@ -763,7 +763,8 @@ export interface components {
             handle: string;
             /** Format: uuid */
             id: string;
-            isDefault: boolean;
+            /** @description The site's default market. Markets are listed default first, so the first market is the default. */
+            default: boolean;
             locales: string[];
             name: string;
             /** @description Configured delivery prices in this market currency for storefront shipping information. Excludes store pickup. Country restrictions and optional weight tiers apply; checkout remains authoritative. Free-shipping threshold uses product total after discounts, before gift-card payment. */

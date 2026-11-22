@@ -4,7 +4,7 @@ import worker from "./worker.js";
 
 const site = {
   name: "Sample <Shop>",
-  markets: [{ handle: "default", defaultLocale: "en", isDefault: true }],
+  markets: [{ handle: "default", defaultLocale: "en", default: true }],
 };
 const store = {
   locale: "en",
@@ -316,7 +316,7 @@ test("selected market and supported locale are retained in pages, stock checks a
         defaultLocale: "nb-NO",
         locales: ["nb-NO", "en"],
         currency: "NOK",
-        isDefault: true,
+        default: true,
       },
     ],
   };
@@ -711,7 +711,7 @@ test("emits SEO metadata, JSON-LD, sitemap.xml, workers.dev noindex, and omits c
         defaultLocale: "nb-NO",
         locales: ["nb-NO", "en"],
         currency: "NOK",
-        isDefault: true,
+        default: true,
       },
     ],
   };
@@ -793,7 +793,7 @@ test("supports /reai/cart-quote, /reai/analytics, Idempotency-Key validation, an
         defaultLocale: "nb-NO",
         locales: ["nb-NO", "en"],
         currency: "NOK",
-        isDefault: true,
+        default: true,
       },
     ],
   };
